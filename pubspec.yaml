@@ -1,0 +1,45 @@
+name: flutter_player_v
+description: "A new Flutter project for music player."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  just_audio: ^0.9.34
+  audio_service: ^0.18.9
+  provider: ^6.1.1
+  path: ^1.8.3
+  path_provider: ^2.1.1
+  shared_preferences: ^2.2.2
+  sqflite: ^2.3.0
+  crypto: ^3.0.3
+  file_picker: ^8.0.0
+  flutter_launcher_icons: ^0.14.0
+  audioplayers: ^6.4.0
+  id3: ^1.0.2
+
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/app_ico.png"
+  remove_alpha_ios: true
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/music/
+
