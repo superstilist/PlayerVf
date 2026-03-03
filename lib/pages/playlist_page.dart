@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/music_card.dart';
 import '../services/music_service.dart';
+import '../models/playlist_model.dart';
+import '../widgets/fade_in_up_animation.dart';
+import '../widgets/small_playlist_card.dart';
+import 'playlist_detail_page.dart';
+
+import '../services/responsive.dart';
 
 class PlaylistPage extends StatelessWidget {
   const PlaylistPage({super.key});
@@ -10,64 +15,115 @@ class PlaylistPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MusicService>(
       builder: (context, musicService, child) {
-        final size = MediaQuery.of(context).size;
-        final crossAxisCount = _getCrossAxisCount(size.width);
+        final allPlaylists = musicService.allPlaylists;
         
         return Scaffold(
-          body: FutureBuilder(
-            future: musicService.loadMusic(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              } else if (musicService.musicList.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.playlist_play, size: 80, color: Colors.grey[600]),
-                      const SizedBox(height: 16),
-                      Text('No playlists yet', style: TextStyle(color: Colors.grey[600], fontSize: 18)),
-                    ],
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            title: Text('Playlists', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20.sp)),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: Icon(Icons.add_rounded, size: 24.s),
+                onPressed: () => _showCreatePlaylistDialog(context, musicService),
+              ),
+            ],
+          ),
+          body: allPlaylists.isEmpty
+              ? _buildEmptyState(context, musicService)
+              : _buildPlaylistGrid(context, musicService, allPlaylists),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, MusicService musicService) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.playlist_add_rounded, size: 80.s, color: Colors.grey[800]),
+          SizedBox(height: 16.h),
+          Text('No playlists yet', style: TextStyle(color: Colors.grey, fontSize: 18.sp)),
+          SizedBox(height: 24.h),
+          ElevatedButton.icon(
+            onPressed: () => _showCreatePlaylistDialog(context, musicService),
+            icon: Icon(Icons.add, size: 20.s),
+            label: Text('Create Playlist', style: TextStyle(fontSize: 14.sp)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.s)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaylistGrid(BuildContext context, MusicService musicService, List<Playlist> playlists) {
+    return ListView.builder(
+      padding: EdgeInsets.all(16.s),
+      itemCount: playlists.length,
+      itemBuilder: (context, index) {
+        final playlist = playlists[index];
+        final isSystem = ['favorites', 'most_listened', 'early_listened', 'daily_mix'].contains(playlist.id);
+        
+        return FadeInUpAnimation(
+          delay: 0.05 * index,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: 12.h),
+            child: SmallPlaylistCard(
+              playlist: playlist,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PlaylistDetailPage(playlist: playlist),
                   ),
                 );
-              } else {
-                return GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 10.0,
-                    mainAxisSpacing: 10.0,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: musicService.musicList.length,
-                  itemBuilder: (context, index) {
-                    final music = musicService.musicList[index];
-                    final cover = index < musicService.coverList.length ? musicService.coverList[index] : null;
-                    return MusicCard(
-                      music: music,
-                      cover: cover,
-                      onTap: () {
-                        musicService.currentIndex = index;
-                        musicService.play();
-                      },
-                    );
-                  },
-                );
-              }
-            },
+              },
+              onDelete: isSystem ? null : () => musicService.deletePlaylist(playlist.id),
+            ),
           ),
         );
       },
     );
   }
 
-  int _getCrossAxisCount(double width) {
-    if (width < 400) return 2;
-    if (width < 600) return 3;
-    if (width < 900) return 4;
-    if (width < 1200) return 5;
-    return 6;
+
+  void _showCreatePlaylistDialog(BuildContext context, MusicService musicService) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('New Playlist', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Name...',
+            hintStyle: TextStyle(color: Colors.white24),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                musicService.createPlaylist(controller.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Create', style: TextStyle(color: Colors.teal)),
+          ),
+        ],
+      ),
+    );
   }
 }

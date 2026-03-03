@@ -1,5 +1,5 @@
 name: PlayerVf
-description: "A new Flutter project for music player."
+description: "A cross-platform music player with system music folder scanning."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,36 +10,38 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  just_audio: ^0.9.34
-  audio_service: ^0.18.9
+  # Audio playback
+  audioplayers: ^5.2.1
+  # State management
   provider: ^6.1.1
+  # Path utilities
   path: ^1.8.3
   path_provider: ^2.1.1
+  # Local storage
   shared_preferences: ^2.2.2
+  # Database for caching
   sqflite: ^2.3.0
-  crypto: ^3.0.3
-  file_picker: ^8.0.0
-  flutter_launcher_icons: ^0.14.0
-  audioplayers: ^6.4.0
+  # ID3 tag parsing
   id3: ^1.0.2
-
-
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/images/app_ico.png"
-  remove_alpha_ios: true
+  # File picker for custom directories
+  file_picker: ^8.0.0
+  # Permission handling for mobile
+  permission_handler: ^11.3.0
+  # Media metadata reader for all audio formats
+  flutter_media_metadata: ^1.0.0
+  # Concurrency and background processing
+  async: ^2.11.0
+  # Device information
+  device_info_plus: ^9.1.2
+  # Media store access for Android 10+
+  on_audio_query: ^2.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/images/
-    - assets/music/
-

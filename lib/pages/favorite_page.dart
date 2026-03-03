@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../widgets/music_card.dart';
 import '../services/music_service.dart';
+
+import '../services/responsive.dart';
 
 class FavoritePage extends StatelessWidget {
   const FavoritePage({super.key});
@@ -10,64 +13,77 @@ class FavoritePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MusicService>(
       builder: (context, musicService, child) {
-        final size = MediaQuery.of(context).size;
-        final crossAxisCount = _getCrossAxisCount(size.width);
+        final crossAxisCount = _calculateAdaptiveCrossAxisCount(Responsive.screenWidth);
+        final padding = 16.w;
         
-        return Scaffold(
-          body: FutureBuilder(
-            future: musicService.loadMusic(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              } else if (musicService.musicList.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.favorite_border, size: 80, color: Colors.grey[600]),
-                      const SizedBox(height: 16),
-                      Text('No favorites yet', style: TextStyle(color: Colors.grey[600], fontSize: 18)),
-                    ],
-                  ),
-                );
-              } else {
-                return GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 10.0,
-                    mainAxisSpacing: 10.0,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: musicService.musicList.length,
-                  itemBuilder: (context, index) {
-                    final music = musicService.musicList[index];
-                    final cover = musicService.coverList[index];
-                    return MusicCard(
-                      music: music,
-                      cover: cover,
-                      onTap: () {
-                        musicService.currentIndex = index;
-                        musicService.play();
-                      },
-                    );
-                  },
-                );
-              }
-            },
+        // Show loading if still scanning
+        if (musicService.isLoadingSystemMusic) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: Colors.teal),
+                SizedBox(height: 16.h),
+                Text('Scanning music... ${musicService.systemMusicCount} files',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14.sp)),
+              ],
+            ),
+          );
+        }
+        
+        final favoriteMusicList = musicService.favoriteMusicList;
+        final favoriteCoverList = musicService.favoriteCoverList;
+        
+        if (favoriteMusicList.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.favorite_border, size: 80.s, color: Colors.grey[600]),
+                SizedBox(height: 16.h),
+                Text('No favorite songs', style: TextStyle(color: Colors.grey[600], fontSize: 18.sp)),
+                SizedBox(height: 8.h),
+                Text('Tap the heart icon on songs to add them to favorites', 
+                  style: TextStyle(color: Colors.grey[700], fontSize: 14.sp),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+        
+        return GridView.builder(
+          padding: EdgeInsets.all(padding),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16.w,
+            mainAxisSpacing: 16.h,
+            childAspectRatio: 1.0,
           ),
+          itemCount: favoriteMusicList.length,
+          itemBuilder: (context, index) {
+            final music = favoriteMusicList[index];
+            final cover = index < favoriteCoverList.length ? favoriteCoverList[index] : null;
+            final originalIndex = musicService.musicList.indexWhere((m) => m.id == music.id);
+            return MusicCard(
+              music: music,
+              cover: cover,
+              onTap: () {
+                musicService.currentIndex = originalIndex;
+                musicService.play();
+              },
+            );
+          },
         );
       },
     );
   }
 
-  int _getCrossAxisCount(double width) {
-    if (width < 400) return 2;
-    if (width < 600) return 3;
-    if (width < 900) return 4;
-    if (width < 1200) return 5;
+  int _calculateAdaptiveCrossAxisCount(double screenWidth) {
+    if (screenWidth < 600) return 2;
+    if (screenWidth < 900) return 3;
+    if (screenWidth < 1200) return 4;
     return 6;
   }
 }
+

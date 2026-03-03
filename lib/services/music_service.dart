@@ -1,211 +1,535 @@
-import 'package:flutter/services.dart' show rootBundle;
+import 'dart:io';
 import 'dart:convert';
-import 'package:path/path.dart' as path;
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
-
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/music_model.dart';
 import '../models/cover_model.dart';
-import '../services/cover_extractor.dart';
-import '../services/id3_parser.dart';
+import '../models/playlist_model.dart';
+import 'music_scanner_service.dart';
 
 class MusicService extends ChangeNotifier {
   List<Music> _musicList = [];
-  List<Cover?> _coverList = [];
+  List<Cover> _coverList = [];
   int _currentIndex = 0;
-  final CoverExtractor _coverExtractor = CoverExtractor();
-  final ID3Parser _id3Parser = ID3Parser();
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  Duration _duration = Duration(minutes: 3, seconds: 30);
-  Duration _position = Duration.zero;
   bool _isPlaying = false;
-  Future<void>? _loadMusicFuture;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  late AudioPlayer _audioPlayer;
+  
+  // Queue Management
+  List<int> _queue = [];
+  bool _isShuffle = false;
+  
+  // Scanning state
+  bool _isLoadingSystemMusic = false;
+  int _systemMusicCount = 0;
+  String _currentScanPath = '';
+  
+  // Caching System Playlists to prevent infinite loops and lag
+  List<Music> _cachedDailyMix = [];
+  List<Music> _cachedMostListened = [];
+  List<Music> _cachedEarlyListened = [];
 
+  // Cache files
+  static const String _favoritesCacheFile = 'favorites.json';
+  static const String _playlistsCacheFile = 'playlists.json';
+  static const String _statsCacheFile = 'music_stats.json';
+
+  List<Playlist> _playlists = [];
+  String? _currentPlaylistId;
+  int _currentPlaylistIndex = 0;
+  bool _isRepeatOne = false;
+  bool _isRepeatAll = true;
+
+  MusicService() {
+    _audioPlayer = AudioPlayer();
+    _initAudioPlayer();
+    _loadFavoritesFromCache();
+    _loadPlaylistsFromCache();
+  }
+
+  // Getters
   List<Music> get musicList => _musicList;
-  List<Cover?> get coverList => _coverList;
+  List<Cover> get coverList => _coverList;
   int get currentIndex => _currentIndex;
+  bool get isPlaying => _isPlaying;
+  Duration get position => _position;
+  Duration get duration => _duration;
+  bool get isLoadingSystemMusic => _isLoadingSystemMusic;
+  int get systemMusicCount => _systemMusicCount;
+  String get currentScanPath => _currentScanPath;
+  List<Playlist> get playlists => _playlists;
+  bool get isShuffle => _isShuffle;
+  bool get isRepeatOne => _isRepeatOne;
+  bool get isRepeatAll => _isRepeatAll;
+
+  String? get currentPlaylistId => _currentPlaylistId;
+  set currentPlaylistId(String? id) {
+    _currentPlaylistId = id;
+    notifyListeners();
+  }
+
+  int get currentPlaylistIndex => _currentPlaylistIndex;
+  set currentPlaylistIndex(int index) {
+    _currentPlaylistIndex = index;
+    notifyListeners();
+  }
+
+  Music? get currentMusic => 
+      _musicList.isNotEmpty && _currentIndex < _musicList.length 
+          ? _musicList[_currentIndex] 
+          : null;
+
+  Cover? get currentCover =>
+      _coverList.isNotEmpty && _currentIndex < _coverList.length
+          ? _coverList[_currentIndex]
+          : null;
+
+  List<Music> get favoriteMusicList => _musicList.where((m) => m.isFavorite).toList();
+
+  List<Cover> get favoriteCoverList {
+    final List<Cover> list = [];
+    for (int i = 0; i < _musicList.length; i++) {
+      if (_musicList[i].isFavorite && i < _coverList.length) {
+        list.add(_coverList[i]);
+      }
+    }
+    return list;
+  }
+
+  // System Playlists
+  List<Playlist> get systemPlaylists {
+    return [
+      Playlist(id: 'favorites', name: 'Favorites', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'most_listened', name: 'Most Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'early_listened', name: 'Early Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'daily_mix', name: 'Daily Mix', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+    ];
+  }
+
+  List<Playlist> get allPlaylists => [...systemPlaylists, ..._playlists];
+
+  /// Generate and Cache System Playlists
+  void refreshSystemPlaylists() {
+    // 1. Most Listened
+    final mostPlayed = List<Music>.from(_musicList);
+    mostPlayed.sort((a, b) => b.playCount.compareTo(a.playCount));
+    _cachedMostListened = mostPlayed.take(30).where((m) => m.playCount > 0).toList();
+
+    // 2. Early Listened
+    final earlyPlayed = List<Music>.from(_musicList);
+    earlyPlayed.sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
+    _cachedEarlyListened = earlyPlayed.take(30).where((m) => m.lastPlayed != null).toList();
+
+    // 3. Daily Mix
+    if (_musicList.isNotEmpty) {
+      final List<Music> result = [..._cachedMostListened.take(10)];
+      final genres = _musicList.map((m) => m.genre).toSet().toList();
+      if (genres.isNotEmpty) {
+        final randomGenre = genres[Random().nextInt(genres.length)];
+        final genreList = _musicList.where((m) => m.genre == randomGenre).take(20).toList();
+        result.addAll(genreList);
+      }
+      result.shuffle();
+      _cachedDailyMix = result.toSet().toList();
+    } else {
+      _cachedDailyMix = [];
+    }
+    
+    notifyListeners();
+  }
+
+  List<Music> getMostListened() => _cachedMostListened;
+  List<Music> getEarlyListened() => _cachedEarlyListened;
+  List<Music> getDailyMix() => _cachedDailyMix;
+
   set currentIndex(int index) {
     if (index >= 0 && index < _musicList.length) {
       _currentIndex = index;
       notifyListeners();
-      // Load and play the new track
-      _loadCurrentTrack();
     }
   }
-  Music? get currentMusic => _musicList.isNotEmpty ? _musicList[_currentIndex] : null;
-  Cover? get currentCover => _coverList.isNotEmpty ? _coverList[_currentIndex] : null;
-  bool get isPlaying => _isPlaying;
-  Duration get duration => _duration;
-  Duration get position => _position;
 
-  MusicService() {
-    // Listen to audio player state changes
-    _audioPlayer.onPlayerStateChanged.listen((playerState) {
-      _isPlaying = playerState == PlayerState.playing;
-      notifyListeners();
-    });
-    
-    // Listen to position changes
+  void _initAudioPlayer() {
     _audioPlayer.onPositionChanged.listen((position) {
       _position = position;
       notifyListeners();
     });
-    
-    // Listen to duration changes
+
     _audioPlayer.onDurationChanged.listen((duration) {
       _duration = duration;
       notifyListeners();
     });
 
-    // Listen for player completion
     _audioPlayer.onPlayerComplete.listen((_) {
-      next();
+      if (_isRepeatOne) {
+        play();
+      } else {
+        next();
+      }
+    });
+
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      _isPlaying = state == PlayerState.playing;
+      notifyListeners();
     });
   }
 
-  Future<void> _loadCurrentTrack() async {
-    if (_musicList.isEmpty || _currentIndex >= _musicList.length) return;
-    
-    final music = _musicList[_currentIndex];
-    try {
-      // For asset files in audioplayers, use AssetSource
-      // assets/music/song.mp3 -> music/song.mp3
-      final assetPath = music.filePath.replaceFirst('assets/', '');
-      await _audioPlayer.play(AssetSource(assetPath));
-    } catch (e) {
-      print('Error loading track: $e');
-    }
+  List<Music> getMusicListForPlaylist(String playlistId) {
+    if (playlistId == 'most_listened') return _cachedMostListened;
+    if (playlistId == 'early_listened') return _cachedEarlyListened;
+    if (playlistId == 'daily_mix') return _cachedDailyMix;
+    if (playlistId == 'favorites') return favoriteMusicList;
+
+    final playlist = _playlists.firstWhere((p) => p.id == playlistId, orElse: () => Playlist(id: '', name: '', musicIds: [], createdAt: DateTime.now(), updatedAt: DateTime.now()));
+    return playlist.musicIds
+        .map((mId) => _musicList.firstWhere((m) => m.id == mId, orElse: () => Music(id: '', title: '', artist: '', album: '', filePath: '', coverPath: '')))
+        .where((m) => m.id.isNotEmpty)
+        .toList();
   }
 
-  Future<void> loadMusic() async {
-    // Return cached future if already loading/loaded
-    if (_loadMusicFuture != null) {
-      return _loadMusicFuture!;
+  List<Cover> getCoverListForPlaylist(String playlistId) {
+    final list = getMusicListForPlaylist(playlistId);
+    final List<Cover> covers = [];
+    for (var music in list) {
+      final idx = _musicList.indexWhere((m) => m.id == music.id);
+      if (idx != -1 && idx < _coverList.length) {
+        covers.add(_coverList[idx]);
+      } else {
+        covers.add(Cover());
+      }
     }
-    
-    _loadMusicFuture = _loadMusicInternal();
-    return _loadMusicFuture!;
+    return covers;
   }
 
-  Future<void> _loadMusicInternal() async {
-    try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final manifestMap = json.decode(manifestContent) as Map<String, dynamic>;
-
-      final musicAssets = manifestMap.keys
-          .where((String key) => key.startsWith('assets/music/'))
-          .toList();
-
-      final musicAndCovers = await Future.wait(musicAssets.map((musicPath) async {
-        final fileName = path.basenameWithoutExtension(musicPath);
-        
-        // Parse ID3 tags
-        final tags = await _id3Parser.parseTagsFromAsset(musicPath);
-        
-        // Extract cover art
-        Cover? cover;
-        final coverData = _id3Parser.extractCover(tags);
-        if (coverData != null) {
-          cover = Cover(
-            id: 'cover_$fileName',
-            filePath: musicPath,
-            imageData: coverData,
-          );
-        }
-        
-        // Create Music object from tags
-        final music = _id3Parser.createMusicFromTags(musicPath, tags);
-        
-        // Set approximate duration for each track
-        const approximateDuration = Duration(minutes: 3, seconds: 30);
-        music.duration = approximateDuration;
-        
-        return {
-          'music': music,
-          'cover': cover
-        };
-      }));
-
-      _musicList = musicAndCovers.map((item) => item['music'] as Music).toList();
-      _coverList = musicAndCovers.map((item) => item['cover'] as Cover?).toList();
+  void removeMusicFromPlaylist(String playlistId, String musicId) {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index != -1) {
+      _playlists[index].musicIds.remove(musicId);
+      _savePlaylists();
       notifyListeners();
-    } catch (e) {
-      print('Error loading music: $e');
-      rethrow;
     }
   }
 
-  Future<void> play() async {
-    if (_musicList.isEmpty) {
-      await loadMusic();
-    }
-    if (_musicList.isNotEmpty) {
-      try {
-        // If not already playing, load and play
-        if (_audioPlayer.state != PlayerState.playing) {
-          await _loadCurrentTrack();
-        }
-        await _audioPlayer.resume();
-        _isPlaying = true;
-        notifyListeners();
-      } catch (e) {
-        print('Error playing music: $e');
+  void deletePlaylist(String playlistId) {
+    _playlists.removeWhere((p) => p.id == playlistId);
+    _savePlaylists();
+    notifyListeners();
+  }
+
+  void playPlaylist(String playlistId) {
+    final list = getMusicListForPlaylist(playlistId);
+    if (list.isNotEmpty) {
+      _currentPlaylistId = playlistId;
+      _currentPlaylistIndex = 0;
+      final firstMusicId = list.first.id;
+      final index = _musicList.indexWhere((m) => m.id == firstMusicId);
+      if (index != -1) {
+        _currentIndex = index;
+        if (_isShuffle) _generateShuffleQueue();
+        play();
       }
     }
   }
 
-  void pause() {
-    _audioPlayer.pause();
-    _isPlaying = false;
+  void toggleShuffle() {
+    _isShuffle = !_isShuffle;
+    if (_isShuffle) {
+      _generateShuffleQueue();
+    } else {
+      _queue.clear();
+    }
     notifyListeners();
+  }
+
+  void _generateShuffleQueue() {
+    _queue = List.generate(_musicList.length, (index) => index);
+    _queue.remove(_currentIndex);
+    _queue.shuffle();
+    _queue.insert(0, _currentIndex);
+  }
+
+  void toggleRepeatMode() {
+    if (_isRepeatAll && !_isRepeatOne) {
+      _isRepeatAll = false;
+      _isRepeatOne = true;
+    } else if (!_isRepeatAll && _isRepeatOne) {
+      _isRepeatOne = false;
+    } else {
+      _isRepeatAll = true;
+      _isRepeatOne = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> play() async {
+    if (_musicList.isEmpty || _currentIndex >= _musicList.length) return;
+
+    try {
+      final filePath = _musicList[_currentIndex].filePath;
+      final file = File(filePath);
+      
+      if (!await file.exists()) {
+        if (kDebugMode) print('File not found: $filePath');
+        return;
+      }
+
+      await _audioPlayer.stop();
+      await _audioPlayer.play(DeviceFileSource(filePath));
+      _isPlaying = true;
+      
+      _musicList[_currentIndex].playCount++;
+      _musicList[_currentIndex].lastPlayed = DateTime.now();
+      
+      // Update most/early cached lists immediately but don't shuffle daily mix during playback
+      final mostPlayed = List<Music>.from(_musicList);
+      mostPlayed.sort((a, b) => b.playCount.compareTo(a.playCount));
+      _cachedMostListened = mostPlayed.take(30).where((m) => m.playCount > 0).toList();
+
+      final earlyPlayed = List<Music>.from(_musicList);
+      earlyPlayed.sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
+      _cachedEarlyListened = earlyPlayed.take(30).where((m) => m.lastPlayed != null).toList();
+
+      _saveStats();
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Playback error: $e');
+    }
+  }
+
+  Future<void> _saveStats() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_statsCacheFile');
+      final data = _musicList.map((m) => m.toJson()).toList();
+      await file.writeAsString(json.encode(data));
+    } catch (e) {}
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_statsCacheFile');
+      if (await file.exists()) {
+        final List data = json.decode(await file.readAsString());
+        for (var item in data) {
+          final idx = _musicList.indexWhere((m) => m.id == item['id']);
+          if (idx != -1) {
+            final m = _musicList[idx];
+            _musicList[idx] = Music.fromBase(
+              m, 
+              item['playCount'] ?? 0, 
+              item['lastPlayed'] != null ? DateTime.fromMillisecondsSinceEpoch(item['lastPlayed']) : null
+            );
+          }
+        }
+        refreshSystemPlaylists(); // Refresh caches after loading stats
+      }
+    } catch (e) {}
   }
 
   Future<void> togglePlayPause() async {
     if (_isPlaying) {
-      pause();
+      await _audioPlayer.pause();
     } else {
-      await play();
+      if (_audioPlayer.state == PlayerState.paused) {
+        await _audioPlayer.resume();
+      } else {
+        await play();
+      }
     }
+    notifyListeners();
   }
 
   Future<void> next() async {
-    if (_musicList.isEmpty) {
-      await loadMusic();
+    if (_musicList.isEmpty) return;
+
+    if (_isShuffle) {
+      int currentQueueIndex = _queue.indexOf(_currentIndex);
+      if (currentQueueIndex < _queue.length - 1) {
+        _currentIndex = _queue[currentQueueIndex + 1];
+      } else if (_isRepeatAll) {
+        _currentIndex = _queue[0];
+      } else {
+        await _audioPlayer.stop();
+        _isPlaying = false;
+        notifyListeners();
+        return;
+      }
+    } else {
+      if (_currentIndex < _musicList.length - 1) {
+        _currentIndex++;
+      } else if (_isRepeatAll) {
+        _currentIndex = 0;
+      } else {
+        await _audioPlayer.stop();
+        _isPlaying = false;
+        notifyListeners();
+        return;
+      }
     }
-    if (_musicList.isNotEmpty) {
-      _currentIndex = (_currentIndex + 1) % _musicList.length;
-      notifyListeners();
-      await _loadCurrentTrack();
-      await _audioPlayer.resume();
-    }
+    await play();
   }
 
   Future<void> previous() async {
-    if (_musicList.isEmpty) {
-      await loadMusic();
+    if (_musicList.isEmpty) return;
+
+    if (_position.inSeconds > 3) {
+      await _audioPlayer.seek(Duration.zero);
+      return;
     }
-    if (_musicList.isNotEmpty) {
-      _currentIndex = (_currentIndex - 1 + _musicList.length) % _musicList.length;
+
+    if (_isShuffle) {
+      int currentQueueIndex = _queue.indexOf(_currentIndex);
+      if (currentQueueIndex > 0) {
+        _currentIndex = _queue[currentQueueIndex - 1];
+      } else if (_isRepeatAll) {
+        _currentIndex = _queue.last;
+      }
+    } else {
+      if (_currentIndex > 0) {
+        _currentIndex--;
+      } else if (_isRepeatAll) {
+        _currentIndex = _musicList.length - 1;
+      }
+    }
+    await play();
+  }
+
+  Future<void> seekTo(Duration pos) async {
+    await _audioPlayer.seek(pos);
+    notifyListeners();
+  }
+
+  Future<void> loadSystemMusic() async {
+    if (_isLoadingSystemMusic) return;
+    
+    _isLoadingSystemMusic = true;
+    notifyListeners();
+
+    try {
+      final paths = await MusicScannerService.scanSystemMusicFolders(
+        onProgress: (path) {
+          _currentScanPath = path;
+          notifyListeners();
+        },
+      );
+
+      _systemMusicCount = paths.length;
+      _musicList = await MusicScannerService.createMusicListFromPaths(paths);
+      
+      await _loadStats();
+      if (_isShuffle) _generateShuffleQueue();
+      
+      await _extractCovers();
+      await _loadFavoritesFromCache();
+      
+      refreshSystemPlaylists(); // Initial generation of caches
+    } catch (e) {
+      if (kDebugMode) print('Scan error: $e');
+    }
+
+    _isLoadingSystemMusic = false;
+    _currentScanPath = '';
+    notifyListeners();
+  }
+
+  Future<void> _extractCovers() async {
+    _coverList = List.generate(_musicList.length, (index) => Cover());
+    for (int i = 0; i < _musicList.length; i++) {
+      try {
+        final music = _musicList[i];
+        if (music.coverPath.isNotEmpty) {
+          final file = File(music.coverPath);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            if (bytes.isNotEmpty) {
+              _coverList[i] = Cover(imageData: bytes);
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) print('Error extracting cover for ${_musicList[i].title}: $e');
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadFavoritesFromCache() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$_favoritesCacheFile');
+      if (await file.exists()) {
+        final ids = json.decode(await file.readAsString()).cast<String>();
+        for (var music in _musicList) {
+          music.isFavorite = ids.contains(music.id);
+        }
+        notifyListeners();
+      }
+    } catch (e) {}
+  }
+
+  Future<void> toggleFavorite(String musicId) async {
+    final music = _musicList.firstWhere((m) => m.id == musicId);
+    music.isFavorite = !music.isFavorite;
+    notifyListeners();
+    
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$_favoritesCacheFile');
+    final ids = _musicList.where((m) => m.isFavorite).map((m) => m.id).toList();
+    await file.writeAsString(json.encode(ids));
+  }
+
+  Future<void> _loadPlaylistsFromCache() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$_playlistsCacheFile');
+      if (await file.exists()) {
+        final data = json.decode(await file.readAsString()) as List;
+        _playlists = data.map((j) => Playlist.fromJson(j)).toList();
+        notifyListeners();
+      }
+    } catch (e) {}
+  }
+
+  Future<void> createPlaylist(String name) async {
+    final pl = Playlist(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      musicIds: [],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    _playlists.add(pl);
+    await _savePlaylists();
+    notifyListeners();
+  }
+
+  Future<void> _savePlaylists() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$_playlistsCacheFile');
+    await file.writeAsString(json.encode(_playlists.map((p) => p.toJson()).toList()));
+  }
+
+  void addMusicToPlaylist(String plId, String mId) {
+    final pl = _playlists.firstWhere((p) => p.id == plId);
+    if (!pl.musicIds.contains(mId)) {
+      pl.musicIds.add(mId);
+      _savePlaylists();
       notifyListeners();
-      await _loadCurrentTrack();
-      await _audioPlayer.resume();
     }
   }
 
-  Future<void> seekTo(Duration position) async {
-    await _audioPlayer.seek(position);
-    _position = position;
-    notifyListeners();
-  }
-
-  Future<void> setVolume(double volume) async {
-    await _audioPlayer.setVolume(volume);
-    notifyListeners();
-  }
-
-  Future<void> setSpeed(double speed) async {
-    await _audioPlayer.setPlaybackRate(speed);
-    notifyListeners();
+  void deleteMusic(int index) {
+    if (index < _musicList.length) {
+      _musicList.removeAt(index);
+      if (index < _coverList.length) _coverList.removeAt(index);
+      if (_currentIndex >= _musicList.length) _currentIndex = max(0, _musicList.length - 1);
+      notifyListeners();
+    }
   }
 
   @override

@@ -1,196 +1,170 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import '../services/music_service.dart';
+import '../models/settings_model.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _autoResize = true;
-  double _volume = 1.0;
-  double _playbackSpeed = 1.0;
-  bool _shuffleEnabled = false;
-  bool _repeatEnabled = false;
-
-  @override
   Widget build(BuildContext context) {
-    return Consumer<MusicService>(
-      builder: (context, musicService, child) {
-        final size = MediaQuery.of(context).size;
-
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Screen Settings Section
-            _buildSectionHeader('Display & Layout'),
-            const SizedBox(height: 8),
-            Card(
-              color: Colors.grey[900],
-              child: Column(
-                children: [
-                  ListTile(
-                    title: const Text('Current Screen Size', style: TextStyle(color: Colors.white)),
-                    subtitle: Text(
-                      'Width: ${size.width.toStringAsFixed(0)}px | Height: ${size.height.toStringAsFixed(0)}px',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                    ),
-                    trailing: Icon(Icons.devices, color: Colors.teal[300]),
-                  ),
-                  const Divider(color: Colors.grey, height: 1),
-                  ListTile(
-                    title: const Text('Grid Columns', style: TextStyle(color: Colors.white)),
-                    subtitle: Text(
-                      '${_getCrossAxisCount(size.width)} columns',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                    ),
-                    trailing: Icon(Icons.grid_view, color: Colors.teal[300]),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Playback Settings Section
-            _buildSectionHeader('Playback'),
-            const SizedBox(height: 8),
-            Card(
-              color: Colors.grey[900],
-              child: Column(
-                children: [
-                  ListTile(
-                    title: const Text('Volume', style: TextStyle(color: Colors.white)),
-                    subtitle: Slider(
-                      value: _volume,
-                      onChanged: (value) {
-                        setState(() {
-                          _volume = value;
-                        });
-                        musicService.setVolume(value);
-                      },
+    return Consumer<SettingsModel>(
+      builder: (context, settings, child) {
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+          ),
+          body: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            children: [
+              _buildSectionTitle('Layout & Appearance'),
+              _buildSettingCard(
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Auto Card Layout', style: TextStyle(color: Colors.white)),
+                      subtitle: Text('Automatically fit cards to screen', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                      value: settings.useAutoCardCount,
+                      onChanged: (v) => settings.setUseAutoCardCount(v),
                       activeColor: Colors.teal,
-                      inactiveColor: Colors.grey[700],
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    trailing: Text(
-                      '${(_volume * 100).toStringAsFixed(0)}%',
-                      style: TextStyle(color: Colors.teal[300]),
+                    const Divider(color: Colors.white10),
+                    if (settings.useAutoCardCount)
+                      _buildSliderRow(
+                        'Preferred Size',
+                        settings.cardSize,
+                        80, 300,
+                        (v) => settings.setCardSize(v),
+                      )
+                    else
+                      _buildSliderRow(
+                        'Cards per Row',
+                        settings.cardCount.toDouble(),
+                        1, 10,
+                        (v) => settings.setCardCount(v.toInt()),
+                        divisions: 9,
+                      ),
+                    const Divider(color: Colors.white10),
+                    _buildSliderRow(
+                      'Spacing',
+                      settings.cardMargins,
+                      0, 32,
+                      (v) => settings.setCardMargins(v),
                     ),
-                  ),
-                  const Divider(color: Colors.grey, height: 1),
-                  ListTile(
-                    title: const Text('Playback Speed', style: TextStyle(color: Colors.white)),
-                    subtitle: Slider(
-                      value: _playbackSpeed,
-                      min: 0.5,
-                      max: 2.0,
-                      divisions: 6,
-                      onChanged: (value) {
-                        setState(() {
-                          _playbackSpeed = value;
-                        });
-                        musicService.setSpeed(value);
-                      },
-                      activeColor: Colors.teal,
-                      inactiveColor: Colors.grey[700],
-                    ),
-                    trailing: Text(
-                      '${_playbackSpeed}x',
-                      style: TextStyle(color: Colors.teal[300]),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Player Options Section
-            _buildSectionHeader('Player Options'),
-            const SizedBox(height: 8),
-            Card(
-              color: Colors.grey[900],
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    title: const Text('Shuffle', style: TextStyle(color: Colors.white)),
-                    value: _shuffleEnabled,
-                    onChanged: (value) {
-                      setState(() {
-                        _shuffleEnabled = value;
-                      });
-                    },
-                    activeColor: Colors.teal,
-                  ),
-                  const Divider(color: Colors.grey, height: 1),
-                  SwitchListTile(
-                    title: const Text('Repeat', style: TextStyle(color: Colors.white)),
-                    value: _repeatEnabled,
-                    onChanged: (value) {
-                      setState(() {
-                        _repeatEnabled = value;
-                      });
-                    },
-                    activeColor: Colors.teal,
-                  ),
-                ],
+              const SizedBox(height: 24),
+              _buildSectionTitle('Music Library'),
+              _buildSettingCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Storage Locations', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ...settings.musicSourcePaths.map((path) => _buildPathTile(context, settings, path)),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _addPath(context, settings),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add Folder'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 45),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // About Section
-            _buildSectionHeader('About'),
-            const SizedBox(height: 8),
-            Card(
-              color: Colors.grey[900],
-              child: const Column(
-                children: [
-                  ListTile(
-                    title: Text('Material 3 Music Player', style: TextStyle(color: Colors.white)),
-                    subtitle: Text('Version 1.0.0', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    trailing: Icon(Icons.info_outline, color: Colors.teal),
-                  ),
-                  Divider(color: Colors.grey, height: 1),
-                  ListTile(
-                    title: Text('Responsive Design', style: TextStyle(color: Colors.white)),
-                    subtitle: Text('Adapts to mobile, tablet, and desktop screens', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    trailing: Icon(Icons.phone_android, color: Colors.teal),
-                  ),
-                ],
+              const SizedBox(height: 40),
+              Center(
+                child: Text('Version 1.2.0', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
               ),
-            ),
-
-            const SizedBox(height: 32),
-          ],
+            ],
+          ),
         );
       },
     );
   }
 
-  int _getCrossAxisCount(double width) {
-    if (width < 400) return 2;
-    if (width < 600) return 3;
-    if (width < 900) return 4;
-    if (width < 1200) return 5;
-    return 6;
-  }
-
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.only(left: 4, bottom: 12),
       child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.teal,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
+        title.toUpperCase(),
+        style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5),
       ),
     );
+  }
+
+  Widget _buildSettingCard({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSliderRow(String label, double val, double min, double max, ValueChanged<double> cb, {int? divisions}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              Text(val.toStringAsFixed(0), style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: val,
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: cb,
+            activeColor: Colors.teal,
+            inactiveColor: Colors.white10,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPathTile(BuildContext context, SettingsModel settings, String path) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.folder_open_rounded, size: 20, color: Colors.grey),
+          const SizedBox(width: 12),
+          Expanded(child: Text(path, style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.redAccent),
+            onPressed: () => settings.removeMusicPath(path),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addPath(BuildContext context, SettingsModel settings) async {
+    final path = await FilePicker.platform.getDirectoryPath();
+    if (path != null) settings.addMusicPath(path);
   }
 }
