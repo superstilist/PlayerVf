@@ -1,92 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../widgets/music_card.dart';
 import '../services/music_service.dart';
 import '../models/playlist_model.dart';
+import '../models/music_model.dart';
+import '../services/responsive.dart';
 
 class PlaylistDetailPage extends StatelessWidget {
   final Playlist playlist;
 
   const PlaylistDetailPage({super.key, required this.playlist});
 
-  bool _isMobileDevice() {
-    return kIsWeb ||
-           defaultTargetPlatform == TargetPlatform.android ||
-           defaultTargetPlatform == TargetPlatform.iOS;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final musicService = Provider.of<MusicService>(context);
-    final musicList = musicService.getMusicListForPlaylist(playlist.id);
-    final coverList = musicService.getCoverListForPlaylist(playlist.id);
-    final size = MediaQuery.of(context).size;
-    final bool isMobile = _isMobileDevice() || size.width < 600;
+    return Consumer<MusicService>(
+      builder: (context, musicService, child) {
+        final musicList = musicService.getMusicListForPlaylist(playlist.id);
+        final bool isMobile = Responsive.screenWidth < 600;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(playlist.name),
-        backgroundColor: Colors.grey[900],
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1a1a1a),
-              Color(0xFF0a0a0a),
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            title: Text(playlist.name, style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.grey[900],
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: Icon(Icons.play_circle_fill, color: Colors.teal, size: 28.s),
+                onPressed: () => musicService.playPlaylist(playlist.id),
+              ),
             ],
           ),
-        ),
-        child: musicList.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.music_off, size: 60, color: Colors.grey[600]),
-                    const SizedBox(height: 16),
-                    Text('No songs in this playlist', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Text('Add songs to start playing', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                  ],
-                ),
-              )
-            : isMobile
-                ? _buildGridView(musicService, musicList, coverList, isMobile)
-                : _buildListView(musicService, musicList, coverList),
-      ),
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF1a1a1a),
+                  Color(0xFF0a0a0a),
+                ],
+              ),
+            ),
+            child: musicList.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.music_off, size: 60.s, color: Colors.grey[600]),
+                        SizedBox(height: 16.h),
+                        Text('No songs in this playlist', style: TextStyle(color: Colors.grey[500], fontSize: 16.sp)),
+                        SizedBox(height: 8.h),
+                        Text('Add songs to start playing', style: TextStyle(color: Colors.grey[600], fontSize: 14.sp)),
+                      ],
+                    ),
+                  )
+                : isMobile
+                    ? _buildGridView(musicService, musicList)
+                    : _buildListView(musicService, musicList),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildGridView(MusicService musicService, List musicList, List coverList, bool isMobile) {
+  Widget _buildGridView(MusicService musicService, List<Music> musicList) {
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.s),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: isMobile ? 8.0 : 16.0,
-        mainAxisSpacing: isMobile ? 8.0 : 16.0,
+        crossAxisSpacing: 12.w,
+        mainAxisSpacing: 12.h,
         childAspectRatio: 1.0,
       ),
       itemCount: musicList.length,
       itemBuilder: (context, index) {
         final music = musicList[index];
-        final cover = index < coverList.length ? coverList[index] : null;
         final originalIndex = musicService.musicList.indexWhere((m) => m.id == music.id);
 
         return MusicCard(
           music: music,
-          cover: cover,
           onTap: () {
-            // Set current playlist and play the selected song
-            final playlistMusicList = musicService.getMusicListForPlaylist(playlist.id);
-            final songIndex = playlistMusicList.indexWhere((m) => m.id == music.id);
-            if (songIndex != -1) {
+            if (originalIndex != -1) {
               musicService.currentPlaylistId = playlist.id;
-              musicService.currentPlaylistIndex = songIndex;
-              musicService.currentIndex = originalIndex >= 0 ? originalIndex : 0;
+              musicService.currentIndex = originalIndex;
               musicService.play();
             }
           },
@@ -98,94 +97,72 @@ class PlaylistDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildListView(MusicService musicService, List musicList, List coverList) {
+  Widget _buildListView(MusicService musicService, List<Music> musicList) {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.s),
       itemCount: musicList.length,
       itemBuilder: (context, index) {
         final music = musicList[index];
-        final cover = index < coverList.length ? coverList[index] : null;
         final originalIndex = musicService.musicList.indexWhere((m) => m.id == music.id);
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: EdgeInsets.only(bottom: 12.h),
           child: ListTile(
+            contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
             leading: Container(
-              width: 50,
-              height: 50,
+              width: 50.s,
+              height: 50.s,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(8.s),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.3),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                    blurRadius: 4.s,
+                    offset: Offset(0, 2.h),
                   ),
                 ],
               ),
-              child: cover?.imageData != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        cover!.imageData!,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.s),
+                child: music.coverPath.isNotEmpty
+                    ? Image.file(
+                        File(music.coverPath),
                         fit: BoxFit.cover,
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.teal.shade700,
-                            Colors.teal.shade900,
-                            Colors.black,
-                          ],
+                        cacheWidth: 100,
+                        cacheHeight: 100,
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Colors.teal.shade700, Colors.teal.shade900, Colors.black],
+                          ),
                         ),
+                        child: Icon(Icons.music_note, color: Colors.white54, size: 20.s),
                       ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.music_note,
-                          color: Colors.white54,
-                          size: 20,
-                        ),
-                      ),
-                    ),
+              ),
             ),
             title: Text(
               music.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
               music.artist,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[400], fontSize: 12.sp),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             trailing: IconButton(
-              icon: Icon(Icons.delete, color: Colors.grey[500]),
-              onPressed: () {
-                musicService.removeMusicFromPlaylist(playlist.id, music.id);
-              },
+              icon: Icon(Icons.delete_outline_rounded, color: Colors.grey[500], size: 20.s),
+              onPressed: () => musicService.removeMusicFromPlaylist(playlist.id, music.id),
             ),
             onTap: () {
-              // Set current playlist and play the selected song
-              final playlistMusicList = musicService.getMusicListForPlaylist(playlist.id);
-              final songIndex = playlistMusicList.indexWhere((m) => m.id == music.id);
-              if (songIndex != -1) {
+              if (originalIndex != -1) {
                 musicService.currentPlaylistId = playlist.id;
-                musicService.currentPlaylistIndex = songIndex;
-                musicService.currentIndex = originalIndex >= 0 ? originalIndex : 0;
+                musicService.currentIndex = originalIndex;
                 musicService.play();
               }
             },

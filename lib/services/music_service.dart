@@ -12,7 +12,6 @@ import 'music_scanner_service.dart';
 
 class MusicService extends ChangeNotifier {
   List<Music> _musicList = [];
-  List<Cover> _coverList = [];
   int _currentIndex = 0;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
@@ -28,7 +27,7 @@ class MusicService extends ChangeNotifier {
   int _systemMusicCount = 0;
   String _currentScanPath = '';
   
-  // Caching System Playlists to prevent infinite loops and lag
+  // Caching System Playlists
   List<Music> _cachedDailyMix = [];
   List<Music> _cachedMostListened = [];
   List<Music> _cachedEarlyListened = [];
@@ -53,7 +52,6 @@ class MusicService extends ChangeNotifier {
 
   // Getters
   List<Music> get musicList => _musicList;
-  List<Cover> get coverList => _coverList;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
   Duration get position => _position;
@@ -72,33 +70,12 @@ class MusicService extends ChangeNotifier {
     notifyListeners();
   }
 
-  int get currentPlaylistIndex => _currentPlaylistIndex;
-  set currentPlaylistIndex(int index) {
-    _currentPlaylistIndex = index;
-    notifyListeners();
-  }
-
   Music? get currentMusic => 
       _musicList.isNotEmpty && _currentIndex < _musicList.length 
           ? _musicList[_currentIndex] 
           : null;
 
-  Cover? get currentCover =>
-      _coverList.isNotEmpty && _currentIndex < _coverList.length
-          ? _coverList[_currentIndex]
-          : null;
-
   List<Music> get favoriteMusicList => _musicList.where((m) => m.isFavorite).toList();
-
-  List<Cover> get favoriteCoverList {
-    final List<Cover> list = [];
-    for (int i = 0; i < _musicList.length; i++) {
-      if (_musicList[i].isFavorite && i < _coverList.length) {
-        list.add(_coverList[i]);
-      }
-    }
-    return list;
-  }
 
   // System Playlists
   List<Playlist> get systemPlaylists {
@@ -112,19 +89,15 @@ class MusicService extends ChangeNotifier {
 
   List<Playlist> get allPlaylists => [...systemPlaylists, ..._playlists];
 
-  /// Generate and Cache System Playlists
   void refreshSystemPlaylists() {
-    // 1. Most Listened
     final mostPlayed = List<Music>.from(_musicList);
     mostPlayed.sort((a, b) => b.playCount.compareTo(a.playCount));
     _cachedMostListened = mostPlayed.take(30).where((m) => m.playCount > 0).toList();
 
-    // 2. Early Listened
     final earlyPlayed = List<Music>.from(_musicList);
     earlyPlayed.sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
     _cachedEarlyListened = earlyPlayed.take(30).where((m) => m.lastPlayed != null).toList();
 
-    // 3. Daily Mix
     if (_musicList.isNotEmpty) {
       final List<Music> result = [..._cachedMostListened.take(10)];
       final genres = _musicList.map((m) => m.genre).toSet().toList();
@@ -138,13 +111,8 @@ class MusicService extends ChangeNotifier {
     } else {
       _cachedDailyMix = [];
     }
-    
     notifyListeners();
   }
-
-  List<Music> getMostListened() => _cachedMostListened;
-  List<Music> getEarlyListened() => _cachedEarlyListened;
-  List<Music> getDailyMix() => _cachedDailyMix;
 
   set currentIndex(int index) {
     if (index >= 0 && index < _musicList.length) {
@@ -179,30 +147,23 @@ class MusicService extends ChangeNotifier {
   }
 
   List<Music> getMusicListForPlaylist(String playlistId) {
-    if (playlistId == 'most_listened') return _cachedMostListened;
-    if (playlistId == 'early_listened') return _cachedEarlyListened;
-    if (playlistId == 'daily_mix') return _cachedDailyMix;
-    if (playlistId == 'favorites') return favoriteMusicList;
-
-    final playlist = _playlists.firstWhere((p) => p.id == playlistId, orElse: () => Playlist(id: '', name: '', musicIds: [], createdAt: DateTime.now(), updatedAt: DateTime.now()));
-    return playlist.musicIds
-        .map((mId) => _musicList.firstWhere((m) => m.id == mId, orElse: () => Music(id: '', title: '', artist: '', album: '', filePath: '', coverPath: '')))
-        .where((m) => m.id.isNotEmpty)
-        .toList();
+    if (playlistId == 'favorites') {
+      return favoriteMusicList;
+    } else if (playlistId == 'most_listened') {
+      return _cachedMostListened;
+    } else if (playlistId == 'early_listened') {
+      return _cachedEarlyListened;
+    } else if (playlistId == 'daily_mix') {
+      return _cachedDailyMix;
+    } else {
+      final playlist = _playlists.firstWhere((p) => p.id == playlistId, orElse: () => Playlist(id: '', name: '', createdAt: DateTime.now(), updatedAt: DateTime.now()));
+      return _musicList.where((m) => playlist.musicIds.contains(m.id)).toList();
+    }
   }
 
   List<Cover> getCoverListForPlaylist(String playlistId) {
     final list = getMusicListForPlaylist(playlistId);
-    final List<Cover> covers = [];
-    for (var music in list) {
-      final idx = _musicList.indexWhere((m) => m.id == music.id);
-      if (idx != -1 && idx < _coverList.length) {
-        covers.add(_coverList[idx]);
-      } else {
-        covers.add(Cover());
-      }
-    }
-    return covers;
+    return List.generate(list.length, (index) => Cover());
   }
 
   void removeMusicFromPlaylist(String playlistId, String musicId) {
@@ -212,6 +173,12 @@ class MusicService extends ChangeNotifier {
       _savePlaylists();
       notifyListeners();
     }
+  }
+
+  int get currentPlaylistIndex => _currentPlaylistIndex;
+  set currentPlaylistIndex(int index) {
+    _currentPlaylistIndex = index;
+    notifyListeners();
   }
 
   void deletePlaylist(String playlistId) {
@@ -224,7 +191,6 @@ class MusicService extends ChangeNotifier {
     final list = getMusicListForPlaylist(playlistId);
     if (list.isNotEmpty) {
       _currentPlaylistId = playlistId;
-      _currentPlaylistIndex = 0;
       final firstMusicId = list.first.id;
       final index = _musicList.indexWhere((m) => m.id == firstMusicId);
       if (index != -1) {
@@ -270,13 +236,6 @@ class MusicService extends ChangeNotifier {
 
     try {
       final filePath = _musicList[_currentIndex].filePath;
-      final file = File(filePath);
-      
-      if (!await file.exists()) {
-        if (kDebugMode) print('File not found: $filePath');
-        return;
-      }
-
       await _audioPlayer.stop();
       await _audioPlayer.play(DeviceFileSource(filePath));
       _isPlaying = true;
@@ -284,15 +243,7 @@ class MusicService extends ChangeNotifier {
       _musicList[_currentIndex].playCount++;
       _musicList[_currentIndex].lastPlayed = DateTime.now();
       
-      // Update most/early cached lists immediately but don't shuffle daily mix during playback
-      final mostPlayed = List<Music>.from(_musicList);
-      mostPlayed.sort((a, b) => b.playCount.compareTo(a.playCount));
-      _cachedMostListened = mostPlayed.take(30).where((m) => m.playCount > 0).toList();
-
-      final earlyPlayed = List<Music>.from(_musicList);
-      earlyPlayed.sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
-      _cachedEarlyListened = earlyPlayed.take(30).where((m) => m.lastPlayed != null).toList();
-
+      refreshSystemPlaylists();
       _saveStats();
       notifyListeners();
     } catch (e) {
@@ -326,7 +277,7 @@ class MusicService extends ChangeNotifier {
             );
           }
         }
-        refreshSystemPlaylists(); // Refresh caches after loading stats
+        refreshSystemPlaylists();
       }
     } catch (e) {}
   }
@@ -408,53 +359,34 @@ class MusicService extends ChangeNotifier {
     if (_isLoadingSystemMusic) return;
     
     _isLoadingSystemMusic = true;
+    _musicList = [];
     notifyListeners();
 
     try {
-      final paths = await MusicScannerService.scanSystemMusicFolders(
+      await MusicScannerService.startScanning(
         onProgress: (path) {
           _currentScanPath = path;
           notifyListeners();
         },
+        onBatchUpdate: (newMusic) {
+          _musicList.addAll(newMusic);
+          _systemMusicCount = _musicList.length;
+          refreshSystemPlaylists();
+          notifyListeners();
+        },
       );
 
-      _systemMusicCount = paths.length;
-      _musicList = await MusicScannerService.createMusicListFromPaths(paths);
-      
       await _loadStats();
       if (_isShuffle) _generateShuffleQueue();
-      
-      await _extractCovers();
       await _loadFavoritesFromCache();
       
-      refreshSystemPlaylists(); // Initial generation of caches
+      refreshSystemPlaylists();
     } catch (e) {
       if (kDebugMode) print('Scan error: $e');
     }
 
     _isLoadingSystemMusic = false;
     _currentScanPath = '';
-    notifyListeners();
-  }
-
-  Future<void> _extractCovers() async {
-    _coverList = List.generate(_musicList.length, (index) => Cover());
-    for (int i = 0; i < _musicList.length; i++) {
-      try {
-        final music = _musicList[i];
-        if (music.coverPath.isNotEmpty) {
-          final file = File(music.coverPath);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            if (bytes.isNotEmpty) {
-              _coverList[i] = Cover(imageData: bytes);
-            }
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) print('Error extracting cover for ${_musicList[i].title}: $e');
-      }
-    }
     notifyListeners();
   }
 
@@ -526,10 +458,21 @@ class MusicService extends ChangeNotifier {
   void deleteMusic(int index) {
     if (index < _musicList.length) {
       _musicList.removeAt(index);
-      if (index < _coverList.length) _coverList.removeAt(index);
       if (_currentIndex >= _musicList.length) _currentIndex = max(0, _musicList.length - 1);
       notifyListeners();
     }
+  }
+
+  /// Clear all cached music data and re-scan
+  Future<void> clearCache() async {
+    await MusicScannerService.cleanupCache();
+    _musicList = [];
+    _systemMusicCount = 0;
+    _cachedDailyMix = [];
+    _cachedMostListened = [];
+    _cachedEarlyListened = [];
+    notifyListeners();
+    await loadSystemMusic();
   }
 
   @override

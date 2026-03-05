@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../models/playlist_model.dart';
 import '../services/music_service.dart';
 import '../models/music_model.dart';
 import '../models/cover_model.dart';
-
 import '../services/responsive.dart';
 
 class SmallPlaylistCard extends StatelessWidget {
@@ -23,7 +23,6 @@ class SmallPlaylistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final musicService = Provider.of<MusicService>(context);
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
-    final coverList = musicService.getCoverListForPlaylist(playlist.id);
 
     return GestureDetector(
       onTap: onTap,
@@ -44,8 +43,13 @@ class SmallPlaylistCard extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.s),
-                child: musicList.isNotEmpty && coverList.isNotEmpty && coverList[0].imageData != null
-                  ? Image.memory(coverList[0].imageData!, fit: BoxFit.cover)
+                child: musicList.isNotEmpty && musicList[0].coverPath.isNotEmpty
+                  ? Image.file(
+                      File(musicList[0].coverPath),
+                      fit: BoxFit.cover,
+                      cacheWidth: 100,
+                      cacheHeight: 100,
+                    )
                   : Icon(_getPlaylistIcon(playlist.id), color: _getPlaylistColor(playlist.id), size: 24.s),
               ),
             ),
@@ -82,7 +86,6 @@ class SmallPlaylistCard extends StatelessWidget {
       ),
     );
   }
-
 
   IconData _getPlaylistIcon(String id) {
     switch (id) {

@@ -17,24 +17,35 @@ class CoverArtTexture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    try {
+    if (coverArtPath.isNotEmpty) {
       final file = io.File(coverArtPath);
+      // We still check if file exists to avoid showing errorBuilder immediately
       if (file.existsSync()) {
-        final bytes = file.readAsBytesSync();
+        final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+        final int? cacheWidth = width.isFinite 
+            ? (width * devicePixelRatio).toInt() 
+            : null;
+        final int? cacheHeight = height.isFinite 
+            ? (height * devicePixelRatio).toInt() 
+            : null;
+
         return ClipRRect(
           borderRadius: borderRadius ?? BorderRadius.zero,
-          child: Image.memory(
-            bytes,
+          child: Image.file(
+            file,
             width: width,
             height: height,
             fit: BoxFit.cover,
+            // Optimization: use smaller cache size for better performance and memory
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
             errorBuilder: (context, error, stackTrace) {
               return _buildDefaultCover();
             },
           ),
         );
       }
-    } catch (_) {}
+    }
     
     return _buildDefaultCover();
   }
@@ -55,10 +66,15 @@ class CoverArtTexture extends StatelessWidget {
           ],
         ),
       ),
-      child: Icon(
-        Icons.music_note,
-        color: Colors.white54,
-        size: width * 0.4,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.maxWidth.isFinite ? constraints.maxWidth * 0.4 : 60.0;
+          return Icon(
+            Icons.music_note,
+            color: Colors.white54,
+            size: size,
+          );
+        }
       ),
     );
   }

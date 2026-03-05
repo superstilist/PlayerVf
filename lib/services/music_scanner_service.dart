@@ -64,81 +64,99 @@ class MusicScannerService {
 
     _cacheDb = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2, // Increment version
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE file_cache (
             file_path TEXT PRIMARY KEY,
             last_modified INTEGER,
-            file_size INTEGER
+            file_size INTEGER,
+            title TEXT,
+            artist TEXT,
+            album TEXT,
+            genre TEXT,
+            cover_path TEXT
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE file_cache ADD COLUMN title TEXT');
+          await db.execute('ALTER TABLE file_cache ADD COLUMN artist TEXT');
+          await db.execute('ALTER TABLE file_cache ADD COLUMN album TEXT');
+          await db.execute('ALTER TABLE file_cache ADD COLUMN genre TEXT');
+          await db.execute('ALTER TABLE file_cache ADD COLUMN cover_path TEXT');
+        }
       },
     );
 
     return _cacheDb!;
   }
 
-  /// Check if file has been modified since last scan
-  static Future<bool> _isFileModified(File file) async {
+  /// Get cached music data if it exists and file is unchanged
+  static Future<Music?> _getCachedMusic(File file) async {
     try {
       final db = await _initializeCacheDb();
-
       final result = await db.query(
         'file_cache',
         where: 'file_path = ?',
         whereArgs: [file.path],
       );
 
+      if (result.isEmpty) return null;
+
       final stat = await file.stat();
-
-      if (result.isEmpty) {
-        // File not in cache - needs to be processed
-        await db.insert(
-          'file_cache',
-          {
-            'file_path': file.path,
-            'last_modified': stat.modified.millisecondsSinceEpoch,
-            'file_size': stat.size,
-          },
-        );
-        return true;
-      }
-
       final cached = result.first;
-      final cachedModified = (cached['last_modified'] is int)
-          ? (cached['last_modified'] as int)
-          : int.tryParse('${cached['last_modified']}') ?? 0;
-      final fileSize = (cached['file_size'] is int)
-          ? (cached['file_size'] as int)
-          : int.tryParse('${cached['file_size']}') ?? 0;
+      
+      final cachedModified = cached['last_modified'] as int;
+      final cachedSize = cached['file_size'] as int;
 
-      if (stat.modified.millisecondsSinceEpoch != cachedModified ||
-          stat.size != fileSize) {
-        // File has been modified - update cache
-        await db.update(
-          'file_cache',
-          {
-            'last_modified': stat.modified.millisecondsSinceEpoch,
-            'file_size': stat.size,
-          },
-          where: 'file_path = ?',
-          whereArgs: [file.path],
+      if (stat.modified.millisecondsSinceEpoch == cachedModified &&
+          stat.size == cachedSize &&
+          cached['title'] != null) {
+        
+        return Music(
+          id: p.basenameWithoutExtension(file.path),
+          title: cached['title'] as String,
+          artist: cached['artist'] as String,
+          album: cached['album'] as String,
+          genre: cached['genre'] as String? ?? 'Unknown',
+          filePath: file.path,
+          coverPath: cached['cover_path'] as String? ?? '',
         );
-        return true;
       }
-
-      // File unchanged - skip processing
-      return false;
+      return null;
     } catch (e) {
-      if (kDebugMode) {
-        print('Error checking file modification: $e');
-      }
-      return true; // Fallback to processing file
+      return null;
     }
   }
 
-  /// Check if file should be processed (valid extension, not hidden, size >= 1KB)
+  /// Update or insert music data into cache
+  static Future<void> _cacheMusic(Music music, File file) async {
+    try {
+      final db = await _initializeCacheDb();
+      final stat = await file.stat();
+      
+      await db.insert(
+        'file_cache',
+        {
+          'file_path': file.path,
+          'last_modified': stat.modified.millisecondsSinceEpoch,
+          'file_size': stat.size,
+          'title': music.title,
+          'artist': music.artist,
+          'album': music.album,
+          'genre': music.genre,
+          'cover_path': music.coverPath,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      if (kDebugMode) print('Error caching music: $e');
+    }
+  }
+
+  /// Check if file should be processed (valid extension, size >= 1KB)
   static Future<bool> _shouldProcessFile(File file) async {
     try {
       final fileName = p.basename(file.path);
@@ -156,7 +174,7 @@ class MusicScannerService {
         return false; // Skip unsupported file formats
       }
 
-      return await _isFileModified(file);
+      return true;
     } catch (e) {
       if (kDebugMode) {
         print('Error checking file validity: $e');
@@ -171,31 +189,18 @@ class MusicScannerService {
     return _extSet.any((ext) => lowerPath.endsWith(ext));
   }
 
-  /// Scan system music folders and user-defined paths with optimizations
-  /// Returns a list of music file paths
+  /// Scan system music folders and user-defined paths
   static Future<List<String>> scanSystemMusicFolders({
     Function(String)? onProgress,
-    Function(List<Music>)? onBatchUpdate,
   }) async {
     final stopwatch = Stopwatch()..start();
     final Set<String> musicPathsSet = <String>{};
 
-    if (kDebugMode && debugMode) {
-      print('=== Music Scanner Debug ===');
-      print('Platform: ${Platform.operatingSystem}');
-    }
-
-    // First, scan user-defined paths from settings
+    // Scan user-defined paths from settings
     final settings = SettingsModel();
     await settings.loadSettings();
 
     if (settings.musicSourcePaths.isNotEmpty) {
-      if (kDebugMode && debugMode) {
-        print('=== Scanning User-Defined Paths ===');
-        print('User paths: ${settings.musicSourcePaths}');
-      }
-
-      // Scan user paths in parallel (but limited by OS/file system)
       final futures = <Future<List<String>>>[];
       for (final path in settings.musicSourcePaths) {
         onProgress?.call(path);
@@ -209,531 +214,187 @@ class MusicScannerService {
       }
     }
 
-    // If no music files were found in user-defined paths, scan system default locations
     if (musicPathsSet.isEmpty) {
-      if (kDebugMode && debugMode) {
-        print('=== No music found in user paths, scanning system default locations ===');
-      }
-      
       if (Platform.isAndroid) {
-        // Android: Use MediaStore for properscoped storage access
         final results = await _scanAndroidMusicWithMediaStore(onProgress: onProgress);
         musicPathsSet.addAll(results);
-        
-        // Fallback to file system scan if MediaStore returns nothing
         if (musicPathsSet.isEmpty) {
-          if (kDebugMode && debugMode) {
-            print('=== MediaStore returned empty, falling back to file system scan ===');
-          }
           final fallbackResults = await _scanAndroidMusicFallback(onProgress: onProgress);
           musicPathsSet.addAll(fallbackResults);
         }
       } else if (Platform.isIOS) {
-        // iOS: Use app documents directory (limited access)
         final results = await _scanIOSMusicFolders(onProgress: onProgress);
         musicPathsSet.addAll(results);
       } else if (Platform.isWindows) {
-        // Windows: Scan user music folder and common locations
         final results = await _scanWindowsMusicFolders(onProgress: onProgress);
         musicPathsSet.addAll(results);
       } else if (Platform.isMacOS) {
-        // macOS: Scan user music folder
         final results = await _scanMacOSMusicFolders(onProgress: onProgress);
         musicPathsSet.addAll(results);
       } else if (Platform.isLinux) {
-        // Linux: Scan user music folder
         final results = await _scanLinuxMusicFolders(onProgress: onProgress);
         musicPathsSet.addAll(results);
       }
     }
 
     final musicPaths = musicPathsSet.toList()..sort();
-
-    if (kDebugMode && debugMode) {
-      print('=== Total Music Files Found: ${musicPaths.length} ===');
-      for (var path in musicPaths) {
-        print('Music Path: $path');
-      }
-      print('===========================');
-    }
-
     stopwatch.stop();
-    if (kDebugMode) {
-      print('Scan duration: ${stopwatch.elapsedMilliseconds}ms');
-    }
-
     return musicPaths;
   }
 
-  /// Scan Android music using on_audio_query package (recommended for Android)
-  static Future<List<String>> _scanAndroidMusicWithMediaStore({
-    Function(String)? onProgress,
-  }) async {
+  static Future<List<String>> _scanAndroidMusicWithMediaStore({Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
-
-    if (kDebugMode && debugMode) {
-      print('=== Using on_audio_query to scan Android music ===');
-    }
-
-    // Request permissions first
     final permissionsGranted = await _requestStoragePermissions();
-    
-    if (!permissionsGranted) {
-      if (kDebugMode) {
-        print('Storage permissions not granted, cannot query audio');
-      }
-      return [];
-    }
-
+    if (!permissionsGranted) return [];
     try {
-      // Query all audio files using on_audio_query
       onProgress?.call('Querying audio files...');
-      
       final audioFiles = await _audioQuery.querySongs(
         sortType: SongSortType.TITLE,
         orderType: OrderType.ASC_OR_SMALLER,
         uriType: UriType.EXTERNAL,
         ignoreCase: true,
       );
-      
-      if (kDebugMode && debugMode) {
-        print('on_audio_query returned ${audioFiles.length} audio files');
-      }
-
       for (final song in audioFiles) {
-        try {
-          // Get the file path from the song model
-          final String filePath = song.data;
-          
-          if (filePath.isEmpty) {
-            continue;
-          }
-
-          // Check if it's a supported audio format
-          if (!_isSupportedExtension(filePath)) {
-            continue;
-          }
-
-          // Skip if file doesn't exist
-          if (!await File(filePath).exists()) {
-            continue;
-          }
-
-          musicPathsSet.add(filePath);
-          
-          if (kDebugMode && debugMode) {
-            print('Found audio file: $filePath');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error processing audio entry: $e');
-          }
-        }
+        final String filePath = song.data;
+        if (filePath.isEmpty || !_isSupportedExtension(filePath)) continue;
+        if (await File(filePath).exists()) musicPathsSet.add(filePath);
       }
-
-      if (kDebugMode && debugMode) {
-        print('Android on_audio_query found: ${musicPathsSet.length} files');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error using on_audio_query: $e');
-        print('Falling back to file system scan...');
-      }
-    }
-
+    } catch (e) {}
     return musicPathsSet.toList();
   }
 
-  /// Fallback file system scan for Android (for older devices or when MediaStore fails)
-  static Future<List<String>> _scanAndroidMusicFallback({
-    Function(String)? onProgress,
-  }) async {
+  static Future<List<String>> _scanAndroidMusicFallback({Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
-
-    if (kDebugMode && debugMode) {
-      print('=== Using fallback file system scan for Android ===');
-    }
-
-    // Request permissions
     final permissionsGranted = await _requestStoragePermissions();
-
-    if (!permissionsGranted) {
-      if (kDebugMode) {
-        print('Storage permissions not granted');
-      }
-      return [];
-    }
-
-    // Common Android music directories to scan
+    if (!permissionsGranted) return [];
     final List<String> androidMusicDirs = [
       '/storage/emulated/0/Music',
       '/storage/emulated/0/Download',
       '/storage/emulated/0/DCIM',
     ];
-
-    // Try to get external storage directories
-    try {
-      // Get external storage directories
-      final extDirs = await getExternalStorageDirectories(type: StorageDirectory.music);
-      if (extDirs != null && extDirs.isNotEmpty) {
-        for (final d in extDirs) {
-          if (d.path.isNotEmpty) {
-            androidMusicDirs.add(d.path);
-          }
-        }
-      }
-
-      // Try to get the main external storage directory
-      final extDir = await getExternalStorageDirectory();
-      if (extDir != null) {
-        try {
-          // Navigate up to find common music directories
-          String currentPath = extDir.path;
-          // Go up several levels to get to the root of external storage
-          for (int i = 0; i < 5; i++) {
-            final parent = Directory(currentPath).parent;
-            if (parent.path == currentPath) break; // Reached root
-            currentPath = parent.path;
-          }
-          
-          // Add common directories
-          androidMusicDirs.add(p.join(currentPath, 'Music'));
-          androidMusicDirs.add(p.join(currentPath, 'Download'));
-          androidMusicDirs.add(p.join(currentPath, 'Downloads'));
-          androidMusicDirs.add(p.join(currentPath, 'Ringtones'));
-          androidMusicDirs.add(p.join(currentPath, 'Podcasts'));
-          androidMusicDirs.add(p.join(currentPath, 'Alarms'));
-          androidMusicDirs.add(p.join(currentPath, 'Notifications'));
-        } catch (_) {}
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error getting external storage directories: $e');
-    }
-
-    // Also try common paths directly
-    try {
-      // Check /storage directory
-      final storageDir = Directory('/storage');
-      if (await storageDir.exists()) {
-        await for (final entity in storageDir.list(followLinks: false)) {
-          if (entity is Directory) {
-            final emulatedDir = Directory(p.join(entity.path, 'emulated'));
-            if (await emulatedDir.exists()) {
-              await for (final emulatedEntity in emulatedDir.list(followLinks: false)) {
-                if (emulatedEntity is Directory) {
-                  androidMusicDirs.add(p.join(emulatedEntity.path, 'Music'));
-                  androidMusicDirs.add(p.join(emulatedEntity.path, 'Download'));
-                  androidMusicDirs.add(p.join(emulatedEntity.path, 'Downloads'));
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error scanning /storage directory: $e');
-    }
-
-    // Remove duplicates and scan existing directories
     final uniqueDirs = androidMusicDirs.toSet().toList();
-    
-    if (kDebugMode && debugMode) {
-      print('Scanning directories: $uniqueDirs');
-    }
-
-    final futures = <Future<List<String>>>[];
-
-    for (final dirPath in uniqueDirs) {
+    final futures = uniqueDirs.map((dirPath) {
       onProgress?.call(dirPath);
-      final dir = Directory(dirPath);
-      futures.add(_scanDirectoryIfExists(dir));
-    }
-
+      return _scanDirectoryIfExists(Directory(dirPath));
+    }).toList();
     final results = await Future.wait(futures);
-    for (final list in results) {
-      musicPathsSet.addAll(list);
-    }
-
-    if (kDebugMode && debugMode) {
-      print('Android fallback scan found: ${musicPathsSet.length} files');
-    }
-
+    for (final list in results) musicPathsSet.addAll(list);
     return musicPathsSet.toList();
   }
 
-  /// Request storage permissions for Android
   static Future<bool> _requestStoragePermissions() async {
-    try {
-      if (Platform.isAndroid) {
-        final deviceInfo = DeviceInfoPlugin();
-        final androidInfo = await deviceInfo.androidInfo;
-        final sdk = androidInfo.version.sdkInt;
-
-        if (kDebugMode && debugMode) {
-          print('Android SDK: $sdk');
-        }
-
-        if (sdk >= 33) {
-          // Android 13+ - use READ_MEDIA_AUDIO
-          final status = await Permission.audio.status;
-          if (status.isGranted) {
-            if (kDebugMode && debugMode) print('READ_MEDIA_AUDIO already granted');
-            return true;
-          } else if (status.isDenied) {
-            final req = await Permission.audio.request();
-            if (kDebugMode && debugMode) print('READ_MEDIA_AUDIO permission request: $req');
-            return req.isGranted;
-          }
-        } 
-        
-        if (sdk >= 30) {
-          // Android 11-12 - try MANAGE_EXTERNAL_STORAGE or READ_EXTERNAL_STORAGE
-          // First try the newer audio permission
-          final audioStatus = await Permission.audio.status;
-          if (audioStatus.isGranted) {
-            if (kDebugMode && debugMode) print('Audio permission granted');
-            return true;
-          }
-          
-          // Try manage external storage for full access
-          if (await Permission.manageExternalStorage.isGranted) {
-            if (kDebugMode && debugMode) print('Manage external storage already granted');
-            return true;
-          } else {
-            final manageStatus = await Permission.manageExternalStorage.request();
-            if (kDebugMode && debugMode) {
-              print('ManageExternalStorage status: $manageStatus');
-            }
-            if (manageStatus.isGranted) {
-              return true;
-            }
-
-            // Fallback to READ_EXTERNAL_STORAGE
-            final storageStatus = await Permission.storage.request();
-            if (kDebugMode && debugMode) print('Fallback storage status: $storageStatus');
-            return storageStatus.isGranted;
-          }
-        } 
-        
-        // Android < 11 - use READ_EXTERNAL_STORAGE
-        final status = await Permission.storage.status;
-        if (status.isGranted) {
-          return true;
-        } else if (status.isDenied || status.isRestricted) {
-          final req = await Permission.storage.request();
-          if (kDebugMode && debugMode) print('Storage permission request: $req');
-          return req.isGranted;
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error requesting permissions: $e');
-    }
-
-    return false;
+    if (!Platform.isAndroid) return true;
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    final sdk = androidInfo.version.sdkInt;
+    if (sdk >= 33) return await Permission.audio.request().isGranted;
+    return await Permission.storage.request().isGranted;
   }
 
-  /// Scan iOS music folders (limited access)
-  static Future<List<String>> _scanIOSMusicFolders({
-    Function(String)? onProgress,
-  }) async {
-    final Set<String> musicPathsSet = <String>{};
-
-    // iOS has limited file system access
-    // Try to access app documents directory
-    try {
-      final docDir = await getApplicationDocumentsDirectory();
-      onProgress?.call(docDir.path);
-
-      final dir = Directory(docDir.path);
-      final files = await _scanDirectoryIfExists(dir);
-      musicPathsSet.addAll(files);
-    } catch (e) {
-      if (kDebugMode) print('Error scanning iOS directories: $e');
-    }
-
-    return musicPathsSet.toList();
+  static Future<List<String>> _scanIOSMusicFolders({Function(String)? onProgress}) async {
+    final docDir = await getApplicationDocumentsDirectory();
+    onProgress?.call(docDir.path);
+    return await _scanDirectoryIfExists(Directory(docDir.path));
   }
 
-  /// Scan Windows music folders
-  static Future<List<String>> _scanWindowsMusicFolders({
-    Function(String)? onProgress,
-  }) async {
-    final Set<String> musicPathsSet = <String>{};
-
-    try {
-      final userDir = Platform.environment['USERPROFILE'] ?? '';
-      final musicDir = p.join(userDir, 'Music');
-      final downloadsDir = p.join(userDir, 'Downloads');
-
-      // Prepare list of directories to scan
-      final List<String> dirsToScan = [
-        musicDir,
-        downloadsDir,
-        'C:\\Users\\Public\\Music',
-        p.join(userDir, 'Desktop')
-      ];
-
-      // Scan in parallel
-      final futures = <Future<List<String>>>[];
-      for (final d in dirsToScan) {
-        onProgress?.call(d);
-        futures.add(_scanDirectoryIfExists(Directory(d)));
-      }
-
-      final results = await Future.wait(futures);
-      for (final list in results) {
-        musicPathsSet.addAll(list);
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error scanning Windows directories: $e');
-    }
-
-    return musicPathsSet.toList();
+  static Future<List<String>> _scanWindowsMusicFolders({Function(String)? onProgress}) async {
+    final userDir = Platform.environment['USERPROFILE'] ?? '';
+    final dirsToScan = [
+      p.join(userDir, 'Music'),
+      p.join(userDir, 'Downloads'),
+      'C:\\Users\\Public\\Music',
+      p.join(userDir, 'Desktop')
+    ];
+    final futures = dirsToScan.map((d) {
+      onProgress?.call(d);
+      return _scanDirectoryIfExists(Directory(d));
+    }).toList();
+    final results = await Future.wait(futures);
+    return results.expand((x) => x).toList();
   }
 
-  /// Scan macOS music folders
-  static Future<List<String>> _scanMacOSMusicFolders({
-    Function(String)? onProgress,
-  }) async {
-    final Set<String> musicPathsSet = <String>{};
-
-    try {
-      final homeDir = Platform.environment['HOME'] ?? '';
-      final musicDir = p.join(homeDir, 'Music');
-      final downloadsDir = p.join(homeDir, 'Downloads');
-      final desktopDir = p.join(homeDir, 'Desktop');
-
-      final List<String> dirsToScan = [musicDir, downloadsDir, desktopDir];
-
-      final futures = <Future<List<String>>>[];
-      for (final d in dirsToScan) {
-        onProgress?.call(d);
-        futures.add(_scanDirectoryIfExists(Directory(d)));
-      }
-
-      final results = await Future.wait(futures);
-      for (final list in results) {
-        musicPathsSet.addAll(list);
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error scanning macOS directories: $e');
-    }
-
-    return musicPathsSet.toList();
+  static Future<List<String>> _scanMacOSMusicFolders({Function(String)? onProgress}) async {
+    final homeDir = Platform.environment['HOME'] ?? '';
+    final dirsToScan = [p.join(homeDir, 'Music'), p.join(homeDir, 'Downloads'), p.join(homeDir, 'Desktop')];
+    final futures = dirsToScan.map((d) {
+      onProgress?.call(d);
+      return _scanDirectoryIfExists(Directory(d));
+    }).toList();
+    final results = await Future.wait(futures);
+    return results.expand((x) => x).toList();
   }
 
-  /// Scan Linux music folders
-  static Future<List<String>> _scanLinuxMusicFolders({
-    Function(String)? onProgress,
-  }) async {
-    final Set<String> musicPathsSet = <String>{};
-
-    try {
-      final homeDir = Platform.environment['HOME'] ?? '';
-      final musicDir = p.join(homeDir, 'Music');
-      final downloadsDir = p.join(homeDir, 'Downloads');
-      final desktopDir = p.join(homeDir, 'Desktop');
-
-      final List<String> dirsToScan = [musicDir, downloadsDir, desktopDir];
-
-      final futures = <Future<List<String>>>[];
-      for (final d in dirsToScan) {
-        onProgress?.call(d);
-        futures.add(_scanDirectoryIfExists(Directory(d)));
-      }
-
-      final results = await Future.wait(futures);
-      for (final list in results) {
-        musicPathsSet.addAll(list);
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error scanning Linux directories: $e');
-    }
-
-    return musicPathsSet.toList();
+  static Future<List<String>> _scanLinuxMusicFolders({Function(String)? onProgress}) async {
+    final homeDir = Platform.environment['HOME'] ?? '';
+    final dirsToScan = [p.join(homeDir, 'Music'), p.join(homeDir, 'Downloads'), p.join(homeDir, 'Desktop')];
+    final futures = dirsToScan.map((d) {
+      onProgress?.call(d);
+      return _scanDirectoryIfExists(Directory(d));
+    }).toList();
+    final results = await Future.wait(futures);
+    return results.expand((x) => x).toList();
   }
 
-  /// Recursively scan a directory for audio files with optimized performance
   static Future<List<String>> _scanDirectory(Directory dir) async {
     final List<String> files = [];
-
     try {
-      // Use a stream to process files asynchronously
       final stream = dir.list(recursive: true, followLinks: false);
-
       await for (final entity in stream) {
-        if (_scanOperation?.isCanceled ?? false) {
-          break;
-        }
-
-        try {
-          if (entity is File) {
-            if (await _shouldProcessFile(entity)) {
-              files.add(entity.path);
-              if (kDebugMode && debugMode) {
-                print('Found music file: ${entity.path}');
-              }
-            }
-          }
-        } catch (inner) {
-          // ignore errors for individual files (permissions, file gone, etc)
-          if (kDebugMode) {
-            print('Error processing entity ${entity.path}: $inner');
-          }
+        if (_scanOperation?.isCanceled ?? false) break;
+        if (entity is File && await _shouldProcessFile(entity)) {
+          files.add(entity.path);
         }
       }
-    } catch (e) {
-      if (kDebugMode) print('Error scanning directory ${dir.path}: $e');
-    }
-
+    } catch (e) {}
     return files;
   }
 
-  // Helper: check exists then scan (avoids try/catch at call sites)
   static Future<List<String>> _scanDirectoryIfExists(Directory dir) async {
-    try {
-      if (await dir.exists()) {
-        return await _scanDirectory(dir);
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error accessing directory ${dir.path}: $e');
-    }
-    return <String>[];
+    if (await dir.exists()) return await _scanDirectory(dir);
+    return [];
   }
 
-  /// Create Music objects from file paths with optimized parallel processing
+  /// Create Music objects from file paths with optimized parallel processing and caching
   static Future<List<Music>> createMusicListFromPaths(List<String> paths,
       {Function(List<Music>)? onBatchUpdate}) async {
     final stopwatch = Stopwatch()..start();
     final parser = ID3Parser();
     final List<Music> results = [];
+    
+    // Get persistent directory for covers
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final coversDir = p.join(appDocDir.path, 'covers');
+    final dir = Directory(coversDir);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
 
-    // local helper to process single file path
     Future<Music?> processPath(String path) async {
       if (_scanOperation?.isCanceled ?? false) return null;
       try {
-        // Timeout metadata extraction
-        final operation = CancelableOperation.fromFuture(
-          parser.parseTagsFromFile(path),
-          onCancel: () => {},
-        );
+        final file = File(path);
+        final cached = await _getCachedMusic(file);
+        if (cached != null) {
+          // Verify if cover still exists if path is not empty
+          if (cached.coverPath.isNotEmpty) {
+            if (await File(cached.coverPath).exists()) {
+              return cached;
+            }
+            // If cover is missing, re-parse to extract it
+          } else {
+             return cached;
+          }
+        }
 
         final tags = await Future.any([
-          operation.value,
+          parser.parseTagsFromFile(path),
           Future.delayed(Duration(milliseconds: _metadataTimeout), () => <String, dynamic>{}),
         ]);
 
-        final music = parser.createMusicFromTags(path, tags);
-
-        if (kDebugMode && debugMode) {
-          print('Created Music object: ${music.title} - ${music.artist}');
-        }
-
+        final music = parser.createMusicFromTags(path, tags, coverDirectory: coversDir);
+        await _cacheMusic(music, file);
         return music;
       } catch (e) {
-        if (kDebugMode) {
-          print('Error creating Music object for $path: $e');
-        }
         return null;
       }
     }
@@ -742,38 +403,24 @@ class MusicScannerService {
     DateTime lastUpdateTime = DateTime.now();
 
     for (int i = 0; i < paths.length; i += _maxParallelWorkers) {
-      if (_scanOperation?.isCanceled ?? false) {
-        break;
-      }
-
+      if (_scanOperation?.isCanceled ?? false) break;
       final end = (i + _maxParallelWorkers > paths.length) ? paths.length : i + _maxParallelWorkers;
       final sub = paths.sublist(i, end);
-      final futures = sub.map((p) => processPath(p)).toList();
-      final currentBatchResults = await Future.wait(futures);
-
+      final currentBatchResults = await Future.wait(sub.map((p) => processPath(p)));
       final validResults = currentBatchResults.whereType<Music>().toList();
       batchResults.addAll(validResults);
       results.addAll(validResults);
 
-      // Check if we need to send batch update
-      final now = DateTime.now();
-      if (now.difference(lastUpdateTime).inMilliseconds >= _batchUpdateInterval) {
-        lastUpdateTime = now;
+      if (DateTime.now().difference(lastUpdateTime).inMilliseconds >= _batchUpdateInterval) {
+        lastUpdateTime = DateTime.now();
         onBatchUpdate?.call(List.from(batchResults));
+        batchResults.clear();
       }
     }
 
-    // Send final batch update (if anything new)
-    if (batchResults.isNotEmpty) {
-      onBatchUpdate?.call(batchResults);
-    }
-
+    if (batchResults.isNotEmpty) onBatchUpdate?.call(batchResults);
     stopwatch.stop();
-    if (kDebugMode) {
-      print('Metadata extraction duration: ${stopwatch.elapsedMilliseconds}ms');
-    }
-
-    return batchResults;
+    return results;
   }
 
   /// Start scanning with cancellation support
@@ -781,34 +428,17 @@ class MusicScannerService {
     Function(String)? onProgress,
     Function(List<Music>)? onBatchUpdate,
   }) async {
-    // Cancel any existing scan
     await cancelScanning();
-
-    // Start new scan with cancellation token
     _scanOperation = CancelableOperation.fromFuture(
           () async {
-        final paths = await scanSystemMusicFolders(
-          onProgress: onProgress,
-        );
-        return await createMusicListFromPaths(
-          paths,
-          onBatchUpdate: onBatchUpdate,
-        );
+        final paths = await scanSystemMusicFolders(onProgress: onProgress);
+        return await createMusicListFromPaths(paths, onBatchUpdate: onBatchUpdate);
       }(),
-      onCancel: () {
-        if (kDebugMode) {
-          print('Scan cancelled');
-        }
-      },
     );
-
     try {
       return await _scanOperation!.value;
     } catch (e) {
-      // Check if the exception is a cancellation error
-      if (e.toString().toLowerCase().contains('cancel')) {
-        return [];
-      }
+      if (e.toString().toLowerCase().contains('cancel')) return [];
       rethrow;
     }
   }
@@ -821,33 +451,17 @@ class MusicScannerService {
     _scanOperation = null;
   }
 
-  /// Cleanup cache database
+  /// Cleanup cache database and delete covers
   static Future<void> cleanupCache() async {
     try {
       final db = await _initializeCacheDb();
       await db.delete('file_cache');
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error cleaning up cache: $e');
+      
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final coversDir = Directory(p.join(appDocDir.path, 'covers'));
+      if (await coversDir.exists()) {
+        await coversDir.delete(recursive: true);
       }
-    }
-  }
-
-  /// Print all music paths for debugging
-  static void printAllMusicPaths(List<Music> musicList) {
-    if (kDebugMode) {
-      print('=== DEBUG: All Music Paths ===');
-      print('Total music files: ${musicList.length}');
-      print('');
-      for (int i = 0; i < musicList.length; i++) {
-        final music = musicList[i];
-        print('[$i] Title: ${music.title}');
-        print('    Artist: ${music.artist}');
-        print('    Album: ${music.album}');
-        print('    Path: ${music.filePath}');
-        print('');
-      }
-      print('===========================');
-    }
+    } catch (e) {}
   }
 }

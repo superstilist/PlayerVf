@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'pages/home_screen.dart';
 import 'pages/favorite_page.dart';
@@ -9,9 +11,18 @@ import 'pages/settings_screen.dart';
 import 'services/music_service.dart';
 import 'models/settings_model.dart';
 import 'services/responsive.dart';
+import 'widgets/cover_art_texture.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  if (Platform.isWindows || Platform.isLinux) {
+    // Initialize FFI
+    sqfliteFfiInit();
+    // Change the default factory
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -28,25 +39,45 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Material 3 Music Player',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: Colors.black,
-        navigationBarTheme: NavigationBarThemeData(
-          height: 60, // Base height, will be scaled
-          indicatorColor: Colors.teal.withOpacity(0.2),
-          labelTextStyle: WidgetStateProperty.all(
-            const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+    return Consumer<SettingsModel>(
+      builder: (context, settings, child) {
+        return MaterialApp(
+          title: 'Material 3 Music Player',
+          themeMode: settings.themeMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.teal,
+              brightness: Brightness.light,
+            ),
+            navigationBarTheme: NavigationBarThemeData(
+              height: 60,
+              indicatorColor: Colors.teal.withOpacity(0.1),
+              labelTextStyle: WidgetStateProperty.all(
+                const TextStyle(fontSize: 0, fontWeight: FontWeight.w500),
+              ),
+            ),
           ),
-        ),
-      ),
-      home: const MainNavigationScreen(),
-      debugShowCheckedModeBanner: false,
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.teal,
+              brightness: Brightness.dark,
+              surface: Colors.black,
+            ),
+            scaffoldBackgroundColor: Colors.black,
+            navigationBarTheme: NavigationBarThemeData(
+              height: 60,
+              indicatorColor: Colors.teal.withOpacity(0.2),
+              labelTextStyle: WidgetStateProperty.all(
+                const TextStyle(fontSize: 0, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
+          home: const MainNavigationScreen(),
+          debugShowCheckedModeBanner: false,
+        );
+      }
     );
   }
 }
@@ -58,16 +89,45 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   int _previousIndex = 0;
   bool _isPlayerVisible = false;
+  late AnimationController _playerAnimationController;
+  late Animation<Offset> _playerSlideAnimation;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    FavoritePage(),
-    PlaylistPage(),
-    SettingsScreen(),
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearchOpen = false;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _playerAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _playerSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _playerAnimationController,
+      curve: Curves.easeOutCubic,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _playerAnimationController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Widget> get _screens => [
+    HomeScreen(searchQuery: _searchQuery),
+    const FavoritePage(),
+    const PlaylistPage(),
+    const SettingsScreen(),
   ];
 
   void _onDestinationSelected(int index) {
@@ -80,6 +140,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _togglePlayer() {
     setState(() {
       _isPlayerVisible = !_isPlayerVisible;
+      if (_isPlayerVisible) {
+        _playerAnimationController.forward();
+      } else {
+        _playerAnimationController.reverse();
+      }
     });
   }
 
@@ -87,27 +152,34 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     // Initialize Responsive helper
     Responsive.init(context);
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: Column(
         children: [
-          // Top navigation bar - transparent
+          // Top navigation bar area
           Container(
-            decoration: const BoxDecoration(
-              color: Colors.transparent,
-            ),
-            child: NavigationBar(
-              height: 60.h,
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _onDestinationSelected,
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-                NavigationDestination(icon: Icon(Icons.favorite), label: 'Favorites'),
-                NavigationDestination(icon: Icon(Icons.playlist_play), label: 'Playlists'),
-                NavigationDestination(icon: Icon(Icons.settings), label: ''),
+            height: 60.h,
+            padding: EdgeInsets.symmetric(horizontal: 8.w),
+            child: Row(
+              children: [
+                Expanded(
+                  child: NavigationBar(
+                    height: 60.h,
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onDestinationSelected,
+                    destinations: const [
+                      NavigationDestination(icon: Icon(Icons.home), label: ''),
+                      NavigationDestination(icon: Icon(Icons.favorite), label: ''),
+                      NavigationDestination(icon: Icon(Icons.playlist_play), label: ''),
+                      NavigationDestination(icon: Icon(Icons.settings), label: ''),
+                    ],
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                  ),
+                ),
+                _buildAnimatedSearchBar(),
               ],
-              backgroundColor: Colors.transparent,
-              elevation: 0,
             ),
           ),
           // Main content with fade-in animation
@@ -143,33 +215,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ),
                 
                 // Full-screen player overlay with slide animation
-                if (_isPlayerVisible)
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOut,
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 1), // Start from bottom
-                        end: Offset.zero, // End at normal position
-                      ).animate(
-                        CurvedAnimation(
-                          parent: ModalRoute.of(context)!.animation!,
-                          curve: Curves.easeOutCubic,
+                SlideTransition(
+                  position: _playerSlideAnimation,
+                  child: Consumer<MusicService>(
+                    builder: (context, musicService, child) {
+                      return Visibility(
+                        visible: _isPlayerVisible || _playerAnimationController.isAnimating,
+                        maintainState: true,
+                        child: PlayerPage(
+                          onClose: _togglePlayer,
                         ),
-                      ),
-                      child: Consumer<MusicService>(
-                        builder: (context, musicService, child) {
-                          return PlayerPage(
-                            onClose: _togglePlayer,
-                          );
-                        },
-                      ),
-                    ),
+                      );
+                    },
                   ),
+                ),
               ],
             ),
           ),
@@ -193,60 +252,112 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  Widget _buildAnimatedSearchBar() {
+    final theme = Theme.of(context);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      width: _isSearchOpen ? Responsive.screenWidth * 0.4 : 40.s,
+      height: 40.s,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(_isSearchOpen ? 12.s : 10.s),
+        border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1), width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_isSearchOpen ? 12.s : 10.s),
+        child: Row(
+          children: [
+            if (_isSearchOpen)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(left: 12.w),
+                  child: TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    style: TextStyle(fontSize: 14.sp),
+                    decoration: const InputDecoration(
+                      hintText: 'Search...',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value.toLowerCase();
+                      });
+                    },
+                  ),
+                ),
+              ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isSearchOpen = !_isSearchOpen;
+                  if (!_isSearchOpen) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  }
+                });
+              },
+              child: Container(
+                width: 38.s, // Smaller than 40.s to account for border
+                height: 38.s,
+                alignment: Alignment.center,
+                child: Icon(
+                  _isSearchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  size: 20.s,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMiniPlayer(MusicService musicService) {
     final currentMusic = musicService.currentMusic;
-    final currentCover = musicService.currentCover;
+    final theme = Theme.of(context);
 
     return GestureDetector(
       onTap: _togglePlayer,
       child: Container(
-        height: 68.h,
+        height: 72.h,
         decoration: BoxDecoration(
-          color: Colors.grey[900],
+          color: theme.colorScheme.surfaceContainerHighest,
           border: Border(
             top: BorderSide(
-              color: Colors.grey[800]!,
+              color: theme.colorScheme.onSurface.withOpacity(0.1),
               width: 0.5,
             ),
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
           child: Row(
             children: [
-              // Cover art with rounded corners
+              // Cover art
               Container(
-                width: 52.s,
-                height: 52.s,
+                width: 48.s,
+                height: 48.s,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10.s),
+                  borderRadius: BorderRadius.circular(8.s),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.3),
-                      blurRadius: 8.s,
+                      blurRadius: 6.s,
                       offset: Offset(0, 2.h),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10.s),
-                  child: currentCover != null && currentCover.imageData != null
-                      ? Image.memory(
-                          currentCover.imageData!,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Colors.teal.shade700, Colors.teal.shade900],
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.music_note,
-                            color: Colors.white54,
-                            size: 24.s,
-                          ),
-                        ),
+                  borderRadius: BorderRadius.circular(8.s),
+                  child: CoverArtTexture(
+                    coverArtPath: currentMusic?.coverPath ?? '',
+                    width: 48.s,
+                    height: 48.s,
+                  ),
                 ),
               ),
               SizedBox(width: 12.w),
@@ -256,29 +367,28 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min, // Use min to let it fit
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       currentMusic?.title ?? 'No music playing',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14.sp,
+                        fontSize: 13.sp, // Slightly smaller font
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 1.h), // Smaller height
+                    SizedBox(height: 1.h),
                     Text(
                       currentMusic?.artist ?? '',
                       style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12.sp,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 11.sp, // Slightly smaller font
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 2.h), // Smaller height
+                    SizedBox(height: 4.h),
                     // Progress bar
                     ClipRRect(
                       borderRadius: BorderRadius.circular(2.s),
@@ -287,14 +397,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                             ? musicService.position.inMilliseconds /
                                 musicService.duration.inMilliseconds
                             : 0,
-                        backgroundColor: Colors.grey[700],
+                        backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
                         valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
-                        minHeight: 2.h, // Smaller height
+                        minHeight: 2.h,
                       ),
                     ),
                   ],
                 ),
               ),
+              SizedBox(width: 8.w),
 
               // Play/Pause button
               IconButton(
@@ -302,16 +413,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   musicService.isPlaying ? Icons.pause : Icons.play_arrow,
                 ),
                 onPressed: () => musicService.togglePlayPause(),
-                color: Colors.white,
-                iconSize: 32.s,
+                iconSize: 28.s, // Smaller icon
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
+              SizedBox(width: 8.w),
 
               // Next button
               IconButton(
                 icon: const Icon(Icons.skip_next),
                 onPressed: () => musicService.next(),
-                color: Colors.white,
-                iconSize: 28.s,
+                iconSize: 24.s, // Smaller icon
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),

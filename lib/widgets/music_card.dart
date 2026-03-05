@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../models/music_model.dart';
 import '../models/cover_model.dart';
 import '../services/music_service.dart';
-
 import '../services/responsive.dart';
+import 'cover_art_texture.dart';
 
 class MusicCard extends StatelessWidget {
   final Music music;
-  final Cover? cover;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
 
   const MusicCard({
     super.key,
     required this.music,
-    this.cover,
     required this.onTap,
     this.onDelete,
   });
@@ -51,7 +50,11 @@ class MusicCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 // Cover art
-                _buildCoverArt(context),
+                CoverArtTexture(
+                  coverArtPath: music.coverPath,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
                 
                 // Transparent gradient overlay with text
                 Container(
@@ -61,9 +64,9 @@ class MusicCard extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.7),
+                        Colors.black.withOpacity(0.8),
                       ],
-                      stops: const [0.5, 1.0],
+                      stops: const [0.6, 1.0],
                     ),
                   ),
                 ),
@@ -79,7 +82,7 @@ class MusicCard extends StatelessWidget {
                     child: Container(
                       padding: EdgeInsets.all(4.s),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8.s),
                       ),
                       child: Icon(
@@ -106,12 +109,6 @@ class MusicCard extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 10.sp,
                           fontWeight: FontWeight.bold,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 4,
-                            ),
-                          ],
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -120,14 +117,8 @@ class MusicCard extends StatelessWidget {
                       Text(
                         music.artist,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withOpacity(0.7),
                           fontSize: 8.sp,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 4,
-                            ),
-                          ],
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -142,7 +133,6 @@ class MusicCard extends StatelessWidget {
       ),
     );
   }
-
 
   void _showContextMenuFromLongPress(BuildContext context) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -226,61 +216,26 @@ class MusicCard extends StatelessWidget {
         title: const Text('Add to Playlist'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: musicService.playlists.length,
-            itemBuilder: (context, index) {
-              final playlist = musicService.playlists[index];
-              return ListTile(
-                title: Text(playlist.name),
-                subtitle: Text('${playlist.musicIds.length} song${playlist.musicIds.length != 1 ? 's' : ''}'),
-                onTap: () {
-                  musicService.addMusicToPlaylist(playlist.id, music.id);
-                  Navigator.pop(context);
+          child: musicService.playlists.isEmpty 
+            ? const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('No playlists created yet.'),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: musicService.playlists.length,
+                itemBuilder: (context, index) {
+                  final playlist = musicService.playlists[index];
+                  return ListTile(
+                    title: Text(playlist.name),
+                    subtitle: Text('${playlist.musicIds.length} song${playlist.musicIds.length != 1 ? 's' : ''}'),
+                    onTap: () {
+                      musicService.addMusicToPlaylist(playlist.id, music.id);
+                      Navigator.pop(context);
+                    },
+                  );
                 },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCoverArt(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final bool isMobile = size.width < 600;
-    
-    if (cover != null && cover!.imageData != null) {
-      return Image.memory(
-        cover!.imageData!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildPlaceholderCover(isMobile);
-        },
-      );
-    } else {
-      return _buildPlaceholderCover(isMobile);
-    }
-  }
-
-  Widget _buildPlaceholderCover(bool isMobile) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.teal.shade700,
-            Colors.teal.shade900,
-            Colors.black,
-          ],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.music_note,
-          color: Colors.white54,
-          size: isMobile ? 20 : 30,
+              ),
         ),
       ),
     );

@@ -7,12 +7,14 @@ class SettingsModel extends ChangeNotifier {
   static const String _cardMarginsKey = 'card_margins';
   static const String _cardCountKey = 'card_count';
   static const String _useAutoCardCountKey = 'use_auto_card_count';
+  static const String _themeModeKey = 'theme_mode';
 
   List<String> musicSourcePaths = [];
   double cardSize = 140.0;
   double cardMargins = 8.0;
   int cardCount = 3;
   bool useAutoCardCount = true;
+  ThemeMode themeMode = ThemeMode.dark;
 
   SettingsModel() {
     loadSettings();
@@ -26,11 +28,21 @@ class SettingsModel extends ChangeNotifier {
       cardMargins = prefs.getDouble(_cardMarginsKey) ?? 8.0;
       cardCount = prefs.getInt(_cardCountKey) ?? 3;
       useAutoCardCount = prefs.getBool(_useAutoCardCountKey) ?? true;
+      
+      final themeIndex = prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
+      themeMode = ThemeMode.values[themeIndex];
+      
       notifyListeners();
     } catch (e) {
       print('Error loading settings: $e');
       musicSourcePaths = [];
     }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
+    notifyListeners();
+    await _saveSettings();
   }
 
   Future<void> setCardSize(double size) async {
@@ -85,6 +97,7 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setDouble(_cardMarginsKey, cardMargins);
       await prefs.setInt(_cardCountKey, cardCount);
       await prefs.setBool(_useAutoCardCountKey, useAutoCardCount);
+      await prefs.setInt(_themeModeKey, themeMode.index);
     } catch (e) {
       print('Error saving settings: $e');
     }

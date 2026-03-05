@@ -35,6 +35,8 @@ dependencies:
   device_info_plus: ^9.1.2
   # Media store access for Android 10+
   on_audio_query: ^2.9.0
+  sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.5.41
 
 dev_dependencies:
   flutter_test:

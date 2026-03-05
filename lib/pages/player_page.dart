@@ -5,7 +5,6 @@ import '../models/music_model.dart';
 import '../models/cover_model.dart';
 import '../widgets/cover_art_texture.dart';
 import '../widgets/fade_in_up_animation.dart';
-import 'dart:io' as io;
 
 import '../services/responsive.dart';
 
@@ -19,7 +18,6 @@ class PlayerPage extends StatelessWidget {
     return Consumer<MusicService>(
       builder: (context, musicService, child) {
         final currentMusic = musicService.currentMusic;
-        final currentCover = musicService.currentCover;
 
         double coverSize = 300.s; // Base size using 's' for aspect ratio maintenance
 
@@ -33,7 +31,7 @@ class PlayerPage extends StatelessWidget {
                   SizedBox(height: 20.h),
                   _buildTopBar(context, currentMusic),
                   SizedBox(height: 40.h),
-                  _buildCoverSection(currentCover, currentMusic, coverSize),
+                  _buildCoverSection(currentMusic, coverSize),
                   SizedBox(height: 50.h),
                   _buildSongInfo(currentMusic),
                   SizedBox(height: 40.h),
@@ -51,6 +49,7 @@ class PlayerPage extends StatelessWidget {
       },
     );
   }
+
 
   Widget _buildTopBar(BuildContext context, Music? currentMusic) {
     return Row(
@@ -72,7 +71,7 @@ class PlayerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCoverSection(Cover? cover, Music? music, double size) {
+  Widget _buildCoverSection(Music? music, double size) {
     return Center(
       child: Container(
         width: size,
@@ -87,18 +86,16 @@ class PlayerPage extends StatelessWidget {
             ),
           ],
         ),
-        child: ClipRRect(
+        child: CoverArtTexture(
+          coverArtPath: music?.coverPath ?? '',
+          width: size,
+          height: size,
           borderRadius: BorderRadius.circular(30.s),
-          child: cover?.imageData != null
-              ? Image.memory(cover!.imageData!, fit: BoxFit.cover)
-              : Container(
-                  color: Colors.grey[900],
-                  child: Icon(Icons.music_note_rounded, size: 80.s, color: Colors.white24),
-                ),
         ),
       ),
     );
   }
+
 
   Widget _buildSongInfo(Music? music) {
     return Column(

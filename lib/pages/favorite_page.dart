@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../widgets/music_card.dart';
 import '../services/music_service.dart';
 
@@ -32,7 +33,6 @@ class FavoritePage extends StatelessWidget {
         }
         
         final favoriteMusicList = musicService.favoriteMusicList;
-        final favoriteCoverList = musicService.favoriteCoverList;
         
         if (favoriteMusicList.isEmpty) {
           return Center(
@@ -63,11 +63,9 @@ class FavoritePage extends StatelessWidget {
           itemCount: favoriteMusicList.length,
           itemBuilder: (context, index) {
             final music = favoriteMusicList[index];
-            final cover = index < favoriteCoverList.length ? favoriteCoverList[index] : null;
             final originalIndex = musicService.musicList.indexWhere((m) => m.id == music.id);
             return MusicCard(
               music: music,
-              cover: cover,
               onTap: () {
                 musicService.currentIndex = originalIndex;
                 musicService.play();

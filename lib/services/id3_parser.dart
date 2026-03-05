@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:id3/id3.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 
@@ -510,8 +511,8 @@ class ID3Parser {
   static final Map<String, String> _coverCache = {};
 
   // ----------------------------
-  // Create Music model from parsed tags. If cover exists, write to temp file and set coverPath.
-  Music createMusicFromTags(String filePath, Map<String, dynamic> tags) {
+  // Create Music model from parsed tags. If cover exists, write to permanent file and set coverPath.
+  Music createMusicFromTags(String filePath, Map<String, dynamic> tags, {String? coverDirectory}) {
     final fileName = path.basenameWithoutExtension(filePath);
     String coverPath = '';
 
@@ -522,9 +523,18 @@ class ID3Parser {
       } else {
         final coverBytes = extractCover(tags);
         if (coverBytes != null && coverBytes.isNotEmpty) {
-          final tmpDir = io.Directory.systemTemp;
-          final sanitized = fileName.replaceAll(RegExp(r'[^\w\-]'), '_');
-          final coverFile = io.File('${tmpDir.path}/${sanitized}_cover.jpg');
+          // Use a hash of the file path for the cover filename to ensure it's unique and stable
+          final hash = md5.convert(utf8.encode(filePath)).toString();
+          
+          final io.Directory dir = coverDirectory != null 
+              ? io.Directory(coverDirectory) 
+              : io.Directory.systemTemp;
+          
+          if (!dir.existsSync()) {
+            dir.createSync(recursive: true);
+          }
+          
+          final coverFile = io.File('${dir.path}/${hash}_cover.jpg');
           if (!coverFile.existsSync()) {
             coverFile.writeAsBytesSync(coverBytes);
           }
