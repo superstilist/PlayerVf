@@ -132,7 +132,7 @@ class MusicScannerService {
   }
 
   /// Update or insert music data into cache
-  static Future<void> _cacheMusic(Music music, File file) async {
+  static Future<void> cacheMusic(Music music, File file) async {
     try {
       final db = await _initializeCacheDb();
       final stat = await file.stat();
@@ -392,7 +392,7 @@ class MusicScannerService {
         ]);
 
         final music = parser.createMusicFromTags(path, tags, coverDirectory: coversDir);
-        await _cacheMusic(music, file);
+        await cacheMusic(music, file);
         return music;
       } catch (e) {
         return null;

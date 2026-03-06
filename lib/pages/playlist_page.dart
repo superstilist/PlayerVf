@@ -9,13 +9,31 @@ import 'playlist_detail_page.dart';
 import '../services/responsive.dart';
 
 class PlaylistPage extends StatelessWidget {
-  const PlaylistPage({super.key});
+  final String searchQuery;
+  const PlaylistPage({super.key, this.searchQuery = ''});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<MusicService>(
       builder: (context, musicService, child) {
-        final allPlaylists = musicService.allPlaylists;
+        var allPlaylists = musicService.allPlaylists;
+        
+        // Filter playlists based on search query
+        if (searchQuery.isNotEmpty) {
+          allPlaylists = allPlaylists.where((playlist) {
+            // Check if playlist name matches search query
+            final playlistNameMatch = playlist.name.toLowerCase().contains(searchQuery.toLowerCase());
+            
+            // Check if any song in the playlist matches search query
+            final musicList = musicService.getMusicListForPlaylist(playlist.id);
+            final hasMatchingSongs = musicList.any((music) {
+              return music.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                     music.artist.toLowerCase().contains(searchQuery.toLowerCase());
+            });
+            
+            return playlistNameMatch || hasMatchingSongs;
+          }).toList();
+        }
         
         return Scaffold(
           backgroundColor: Colors.black,
@@ -29,16 +47,20 @@ class PlaylistPage extends StatelessWidget {
                 onPressed: () => _showCreatePlaylistDialog(context, musicService),
               ),
             ],
+            toolbarHeight: 80.h, // Increase toolbar height for better spacing
           ),
-          body: allPlaylists.isEmpty
-              ? _buildEmptyState(context, musicService)
-              : _buildPlaylistGrid(context, musicService, allPlaylists),
+          body: SafeArea(
+            child: allPlaylists.isEmpty
+                ? _buildEmptyState(context, musicService)
+                : _buildPlaylistGrid(context, musicService, allPlaylists),
+          ),
         );
       },
     );
   }
 
   Widget _buildEmptyState(BuildContext context, MusicService musicService) {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

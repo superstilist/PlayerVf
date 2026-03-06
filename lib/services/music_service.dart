@@ -463,6 +463,33 @@ class MusicService extends ChangeNotifier {
     }
   }
 
+  Future<void> updateMusicMetadata(String musicId, String title, String artist, String album, String genre) async {
+    final index = _musicList.indexWhere((m) => m.id == musicId);
+    if (index != -1) {
+      final oldMusic = _musicList[index];
+      final newMusic = Music(
+        id: oldMusic.id,
+        title: title,
+        artist: artist,
+        album: album,
+        genre: genre,
+        filePath: oldMusic.filePath,
+        coverPath: oldMusic.coverPath,
+        duration: oldMusic.duration,
+        isFavorite: oldMusic.isFavorite,
+        playCount: oldMusic.playCount,
+        lastPlayed: oldMusic.lastPlayed,
+      );
+      
+      _musicList[index] = newMusic;
+      
+      // Update cache
+      await MusicScannerService.cacheMusic(newMusic, File(newMusic.filePath));
+      
+      notifyListeners();
+    }
+  }
+
   /// Clear all cached music data and re-scan
   Future<void> clearCache() async {
     await MusicScannerService.cleanupCache();

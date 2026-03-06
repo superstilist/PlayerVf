@@ -184,6 +184,16 @@ class MusicCard extends StatelessWidget {
             ],
           ),
         ),
+        PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, color: Colors.teal[300], size: 20),
+              const SizedBox(width: 12),
+              const Text('Edit Metadata', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
         const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'delete',
@@ -203,8 +213,67 @@ class MusicCard extends StatelessWidget {
         onDelete?.call();
       } else if (value == 'add_playlist') {
         _showAddToPlaylistDialog(context);
+      } else if (value == 'edit') {
+        _showEditMetadataDialog(context);
       }
     });
+  }
+
+  void _showEditMetadataDialog(BuildContext context) {
+    final musicService = Provider.of<MusicService>(context, listen: false);
+    final titleController = TextEditingController(text: music.title);
+    final artistController = TextEditingController(text: music.artist);
+    final albumController = TextEditingController(text: music.album);
+    final genreController = TextEditingController(text: music.genre);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Metadata'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                controller: artistController,
+                decoration: const InputDecoration(labelText: 'Artist'),
+              ),
+              TextField(
+                controller: albumController,
+                decoration: const InputDecoration(labelText: 'Album'),
+              ),
+              TextField(
+                controller: genreController,
+                decoration: const InputDecoration(labelText: 'Genre'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              musicService.updateMusicMetadata(
+                music.id,
+                titleController.text,
+                artistController.text,
+                albumController.text,
+                genreController.text,
+              );
+              Navigator.pop(context);
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.teal)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddToPlaylistDialog(BuildContext context) {

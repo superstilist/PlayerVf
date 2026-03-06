@@ -51,7 +51,7 @@ class HomeScreen extends StatelessWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(child: SizedBox(height: isSearching ? 16.h : 20.h)),
+        SliverToBoxAdapter(child: SizedBox(height: isSearching ? 40 : 60)),
 
         if (!isSearching) ...[
           // Even Larger Square Playlist Section with Collages

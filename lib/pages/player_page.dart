@@ -15,6 +15,8 @@ class PlayerPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Consumer<MusicService>(
       builder: (context, musicService, child) {
         final currentMusic = musicService.currentMusic;
@@ -22,24 +24,24 @@ class PlayerPage extends StatelessWidget {
         double coverSize = 300.s; // Base size using 's' for aspect ratio maintenance
 
         return Scaffold(
-          backgroundColor: const Color(0xFF0A0A0A),
+          backgroundColor: theme.colorScheme.surface,
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: 24.w),
-              child: Column(
-                children: [
-                  SizedBox(height: 20.h),
-                  _buildTopBar(context, currentMusic),
+                padding: EdgeInsets.symmetric(horizontal: 24.w),
+                child: Column(
+                  children: [
+                    SizedBox(height: 40.h),
+                  _buildTopBar(context, currentMusic, theme),
                   SizedBox(height: 40.h),
-                  _buildCoverSection(currentMusic, coverSize),
+                  _buildCoverSection(currentMusic, coverSize, theme),
                   SizedBox(height: 50.h),
-                  _buildSongInfo(currentMusic),
+                  _buildSongInfo(currentMusic, theme),
                   SizedBox(height: 40.h),
-                  _buildProgressSlider(musicService),
+                  _buildProgressSlider(musicService, theme),
                   SizedBox(height: 20.h),
-                  _buildPlaybackControls(musicService),
+                  _buildPlaybackControls(musicService, theme),
                   SizedBox(height: 40.h),
-                  _buildBottomActions(context, musicService, currentMusic),
+                  _buildBottomActions(context, musicService, currentMusic, theme),
                   SizedBox(height: 20.h),
                 ],
               ),
@@ -51,27 +53,27 @@ class PlayerPage extends StatelessWidget {
   }
 
 
-  Widget _buildTopBar(BuildContext context, Music? currentMusic) {
+  Widget _buildTopBar(BuildContext context, Music? currentMusic, ThemeData theme) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         IconButton(
-          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 36.s, color: Colors.white),
+          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 36.s, color: theme.colorScheme.onSurface),
           onPressed: onClose,
         ),
         Text(
           'Now Playing',
-          style: TextStyle(color: Colors.white, fontSize: 16.sp, fontWeight: FontWeight.bold, letterSpacing: 1),
+          style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16.sp, fontWeight: FontWeight.bold, letterSpacing: 1),
         ),
         IconButton(
-          icon: Icon(Icons.more_vert_rounded, color: Colors.white, size: 24.s),
+          icon: Icon(Icons.more_vert_rounded, color: theme.colorScheme.onSurface, size: 24.s),
           onPressed: () {},
         ),
       ],
     );
   }
 
-  Widget _buildCoverSection(Music? music, double size) {
+  Widget _buildCoverSection(Music? music, double size, ThemeData theme) {
     return Center(
       child: Container(
         width: size,
@@ -97,12 +99,12 @@ class PlayerPage extends StatelessWidget {
   }
 
 
-  Widget _buildSongInfo(Music? music) {
+  Widget _buildSongInfo(Music? music, ThemeData theme) {
     return Column(
       children: [
         Text(
           music?.title ?? 'Unknown Title',
-          style: TextStyle(color: Colors.white, fontSize: 24.sp, fontWeight: FontWeight.bold),
+          style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 24.sp, fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -110,14 +112,14 @@ class PlayerPage extends StatelessWidget {
         SizedBox(height: 8.h),
         Text(
           music?.artist ?? 'Unknown Artist',
-          style: TextStyle(color: Colors.grey[400], fontSize: 16.sp),
+          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 16.sp),
           textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  Widget _buildProgressSlider(MusicService musicService) {
+  Widget _buildProgressSlider(MusicService musicService, ThemeData theme) {
     final pos = musicService.position;
     final dur = musicService.duration;
     
@@ -129,8 +131,8 @@ class PlayerPage extends StatelessWidget {
             thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.s),
             overlayShape: RoundSliderOverlayShape(overlayRadius: 14.s),
             activeTrackColor: Colors.teal,
-            inactiveTrackColor: Colors.grey[800],
-            thumbColor: Colors.white,
+            inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
+            thumbColor: theme.colorScheme.onSurface,
           ),
           child: Slider(
             value: pos.inSeconds.toDouble().clamp(0, dur.inSeconds.toDouble() + 1),
@@ -143,8 +145,8 @@ class PlayerPage extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_formatDuration(pos), style: TextStyle(color: Colors.grey, fontSize: 12.sp)),
-              Text(_formatDuration(dur), style: TextStyle(color: Colors.grey, fontSize: 12.sp)),
+              Text(_formatDuration(pos), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
+              Text(_formatDuration(dur), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
             ],
           ),
         ),
@@ -152,7 +154,7 @@ class PlayerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaybackControls(MusicService musicService) {
+  Widget _buildPlaybackControls(MusicService musicService, ThemeData theme) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
@@ -160,12 +162,12 @@ class PlayerPage extends StatelessWidget {
           iconSize: 24.s,
           icon: Icon(
             Icons.shuffle_rounded,
-            color: musicService.isShuffle ? Colors.teal : Colors.grey[600],
+            color: musicService.isShuffle ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
           ),
           onPressed: musicService.toggleShuffle,
         ),
         IconButton(
-          icon: Icon(Icons.skip_previous_rounded, size: 40.s, color: Colors.white),
+          icon: Icon(Icons.skip_previous_rounded, size: 40.s, color: theme.colorScheme.onSurface),
           onPressed: musicService.previous,
         ),
         GestureDetector(
@@ -181,14 +183,14 @@ class PlayerPage extends StatelessWidget {
           ),
         ),
         IconButton(
-          icon: Icon(Icons.skip_next_rounded, size: 40.s, color: Colors.white),
+          icon: Icon(Icons.skip_next_rounded, size: 40.s, color: theme.colorScheme.onSurface),
           onPressed: musicService.next,
         ),
         IconButton(
           iconSize: 24.s,
           icon: Icon(
             musicService.isRepeatOne ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-            color: (musicService.isRepeatOne || musicService.isRepeatAll) ? Colors.teal : Colors.grey[600],
+            color: (musicService.isRepeatOne || musicService.isRepeatAll) ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
           ),
           onPressed: musicService.toggleRepeatMode,
         ),
@@ -196,14 +198,14 @@ class PlayerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomActions(BuildContext context, MusicService musicService, Music? music) {
+  Widget _buildBottomActions(BuildContext context, MusicService musicService, Music? music, ThemeData theme) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         IconButton(
           icon: Icon(
             music?.isFavorite == true ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            color: music?.isFavorite == true ? Colors.red : Colors.grey[400],
+            color: music?.isFavorite == true ? Colors.red : theme.colorScheme.onSurface.withOpacity(0.6),
             size: 24.s,
           ),
           onPressed: () {
@@ -211,11 +213,11 @@ class PlayerPage extends StatelessWidget {
           },
         ),
         IconButton(
-          icon: Icon(Icons.playlist_add_rounded, color: Colors.grey[400], size: 24.s),
+          icon: Icon(Icons.playlist_add_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
           onPressed: () {},
         ),
         IconButton(
-          icon: Icon(Icons.share_rounded, color: Colors.grey[400], size: 24.s),
+          icon: Icon(Icons.share_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
           onPressed: () {},
         ),
       ],

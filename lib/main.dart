@@ -125,9 +125,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
 
   List<Widget> get _screens => [
     HomeScreen(searchQuery: _searchQuery),
-    const FavoritePage(),
-    const PlaylistPage(),
-    const SettingsScreen(),
+    FavoritePage(searchQuery: _searchQuery),
+    PlaylistPage(searchQuery: _searchQuery),
   ];
 
   void _onDestinationSelected(int index) {
@@ -155,84 +154,159 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: Column(
-        children: [
-          // Top navigation bar area
-          Container(
-            height: 60.h,
-            padding: EdgeInsets.symmetric(horizontal: 8.w),
-            child: Row(
-              children: [
-                Expanded(
-                  child: NavigationBar(
-                    height: 60.h,
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: _onDestinationSelected,
-                    destinations: const [
-                      NavigationDestination(icon: Icon(Icons.home), label: ''),
-                      NavigationDestination(icon: Icon(Icons.favorite), label: ''),
-                      NavigationDestination(icon: Icon(Icons.playlist_play), label: ''),
-                      NavigationDestination(icon: Icon(Icons.settings), label: ''),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Fixed top margin
+            SizedBox(height: Provider.of<SettingsModel>(context).topMargin),
+            // Top panel with app name on left and search/settings on right
+            Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // App name
+                  const Text(
+                    'PlayerV',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal,
+                    ),
+                  ),
+                  // Search and settings buttons
+                  Row(
+                    children: [
+                      // Search button
+                      IconButton(
+                        icon: Icon(_isSearchOpen ? Icons.close_rounded : Icons.search_rounded),
+                        onPressed: () {
+                          setState(() {
+                            _isSearchOpen = !_isSearchOpen;
+                            if (!_isSearchOpen) {
+                              _searchController.clear();
+                              _searchQuery = '';
+                            }
+                          });
+                        },
+                        padding: const EdgeInsets.all(8),
+                        iconSize: 24,
+                      ),
+                      // Settings button
+                      IconButton(
+                        icon: const Icon(Icons.settings_rounded),
+                        onPressed: () {
+                          setState(() {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                            );
+                          });
+                        },
+                        padding: const EdgeInsets.all(8),
+                        iconSize: 24,
+                      ),
                     ],
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
                   ),
-                ),
-                _buildAnimatedSearchBar(),
-              ],
+                ],
+              ),
             ),
-          ),
-          // Main content with fade-in animation
-          Expanded(
-            child: Stack(
-              children: [
-                // Main content with slide animation based on navigation direction
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder: (child, animation) {
-                    final direction = _selectedIndex > _previousIndex ? 1.0 : -1.0;
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: Offset(direction * 0.3, 0),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeInOut,
-                        ),
-                      ),
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: IndexedStack(
-                    key: ValueKey<int>(_selectedIndex),
-                    index: _selectedIndex,
-                    children: _screens,
-                  ),
+            // Page navigation panel below app name and buttons
+            const SizedBox(height: 24),
+            Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: NavigationBar(
+                  height: 40,
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _onDestinationSelected,
+                  destinations: const [
+                    NavigationDestination(icon: Icon(Icons.home), label: ''),
+                    NavigationDestination(icon: Icon(Icons.favorite), label: ''),
+                    NavigationDestination(icon: Icon(Icons.playlist_play), label: ''),
+                  ],
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
                 ),
-                
-                // Full-screen player overlay with slide animation
-                SlideTransition(
-                  position: _playerSlideAnimation,
-                  child: Consumer<MusicService>(
-                    builder: (context, musicService, child) {
-                      return Visibility(
-                        visible: _isPlayerVisible || _playerAnimationController.isAnimating,
-                        maintainState: true,
-                        child: PlayerPage(
-                          onClose: _togglePlayer,
+              ),
+            ),
+            // Search bar that expands below navigation
+            // Horizontal separator line
+            Container(
+              height: 1.h,
+              color: theme.colorScheme.onSurface.withOpacity(0.1),
+            ),
+            
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              height: _isSearchOpen ? 60.h : 0,
+              child: _isSearchOpen ? _buildExpandedSearchBar(theme) : null,
+            ),
+            
+            // Horizontal separator line between search and main content
+            Container(
+              height: 1.h,
+              color: theme.colorScheme.onSurface.withOpacity(0.1),
+            ),
+            
+            // Additional margin before main content
+            SizedBox(height: 24.h),
+            
+            // Main content with fade-in animation
+            Expanded(
+              child: Stack(
+                children: [
+                  // Main content with slide animation based on navigation direction
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    transitionBuilder: (child, animation) {
+                      final direction = _selectedIndex > _previousIndex ? 1.0 : -1.0;
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: Offset(direction * 0.3, 0),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeInOut,
+                          ),
+                        ),
+                        child: FadeTransition(
+                          opacity: animation,
+                          child: child,
                         ),
                       );
                     },
+                    child: IndexedStack(
+                      key: ValueKey<int>(_selectedIndex),
+                      index: _selectedIndex,
+                      children: _screens,
+                    ),
                   ),
-                ),
-              ],
+                  
+                  // Full-screen player overlay with slide animation
+                  SlideTransition(
+                    position: _playerSlideAnimation,
+                    child: Consumer<MusicService>(
+                      builder: (context, musicService, child) {
+                        return Visibility(
+                          visible: _isPlayerVisible || _playerAnimationController.isAnimating,
+                          maintainState: true,
+                          child: PlayerPage(
+                            onClose: _togglePlayer,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -252,63 +326,61 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
     );
   }
 
-  Widget _buildAnimatedSearchBar() {
-    final theme = Theme.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      width: _isSearchOpen ? Responsive.screenWidth * 0.4 : 40.s,
-      height: 40.s,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(_isSearchOpen ? 12.s : 10.s),
-        border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1), width: 1),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_isSearchOpen ? 12.s : 10.s),
+  Widget _buildExpandedSearchBar(ThemeData theme) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(16.s),
+          border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1), width: 1),
+        ),
         child: Row(
           children: [
-            if (_isSearchOpen)
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(left: 12.w),
-                  child: TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    style: TextStyle(fontSize: 14.sp),
-                    decoration: const InputDecoration(
-                      hintText: 'Search...',
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value.toLowerCase();
-                      });
-                    },
+            SizedBox(width: 12.w),
+            Icon(
+              Icons.search_rounded,
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              size: 20.s,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(fontSize: 14.sp),
+                decoration: InputDecoration(
+                  hintText: 'Search songs, artists...',
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
                   ),
                 ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.toLowerCase();
+                  });
+                },
               ),
-            GestureDetector(
-              onTap: () {
+            ),
+            SizedBox(width: 8.w),
+            IconButton(
+              icon: Icon(
+                Icons.close_rounded,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                size: 20.s,
+              ),
+              onPressed: () {
                 setState(() {
-                  _isSearchOpen = !_isSearchOpen;
-                  if (!_isSearchOpen) {
-                    _searchController.clear();
-                    _searchQuery = '';
-                  }
+                  _isSearchOpen = false;
+                  _searchController.clear();
+                  _searchQuery = '';
                 });
               },
-              child: Container(
-                width: 38.s, // Smaller than 40.s to account for border
-                height: 38.s,
-                alignment: Alignment.center,
-                child: Icon(
-                  _isSearchOpen ? Icons.close_rounded : Icons.search_rounded,
-                  size: 20.s,
-                ),
-              ),
+              padding: EdgeInsets.all(8.s),
+              constraints: const BoxConstraints(),
             ),
           ],
         ),

@@ -8,7 +8,8 @@ import '../services/music_service.dart';
 import '../services/responsive.dart';
 
 class FavoritePage extends StatelessWidget {
-  const FavoritePage({super.key});
+  final String searchQuery;
+  const FavoritePage({super.key, this.searchQuery = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -32,28 +33,39 @@ class FavoritePage extends StatelessWidget {
           );
         }
         
-        final favoriteMusicList = musicService.favoriteMusicList;
+        final favoriteMusicList = musicService.favoriteMusicList.where((m) {
+          return m.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                 m.artist.toLowerCase().contains(searchQuery.toLowerCase());
+        }).toList();
+        
+        final isSearching = searchQuery.isNotEmpty;
         
         if (favoriteMusicList.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.favorite_border, size: 80.s, color: Colors.grey[600]),
+                Icon(isSearching ? Icons.search_off_rounded : Icons.favorite_border, 
+                     size: 80.s, 
+                     color: Colors.grey[600]),
                 SizedBox(height: 16.h),
-                Text('No favorite songs', style: TextStyle(color: Colors.grey[600], fontSize: 18.sp)),
-                SizedBox(height: 8.h),
-                Text('Tap the heart icon on songs to add them to favorites', 
-                  style: TextStyle(color: Colors.grey[700], fontSize: 14.sp),
-                  textAlign: TextAlign.center,
+                Text(
+                  isSearching ? 'No favorite songs found' : 'No favorite songs', 
+                  style: TextStyle(color: Colors.grey[600], fontSize: 18.sp),
                 ),
+                SizedBox(height: 8.h),
+                if (!isSearching)
+                  Text('Tap the heart icon on songs to add them to favorites', 
+                    style: TextStyle(color: Colors.grey[700], fontSize: 14.sp),
+                    textAlign: TextAlign.center,
+                  ),
               ],
             ),
           );
         }
         
         return GridView.builder(
-          padding: EdgeInsets.all(padding),
+           padding: EdgeInsets.fromLTRB(padding, 60, padding, padding),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
             crossAxisSpacing: 16.w,
@@ -84,4 +96,3 @@ class FavoritePage extends StatelessWidget {
     return 6;
   }
 }
-
