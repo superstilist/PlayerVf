@@ -172,7 +172,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.teal,
+                      color: Colors.purple,
                     ),
                   ),
                   // Search and settings buttons
