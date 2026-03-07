@@ -10,8 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  # Audio playback
-  audioplayers: ^5.2.1
+  # Audio playback with real EQ support
+  media_kit: ^1.1.10
+  media_kit_libs_windows_audio: ^1.0.9
+  media_kit_libs_android_audio: ^1.0.9
   # State management
   provider: ^6.1.1
   # Path utilities

@@ -5,6 +5,7 @@ import '../models/music_model.dart';
 import '../models/cover_model.dart';
 import '../widgets/cover_art_texture.dart';
 import '../widgets/fade_in_up_animation.dart';
+import '../widgets/equalizer_sheet.dart';
 
 import '../services/responsive.dart';
 
@@ -217,10 +218,25 @@ class PlayerPage extends StatelessWidget {
           onPressed: () {},
         ),
         IconButton(
+          icon: Icon(Icons.equalizer_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
+          onPressed: () {
+            _showEqualizer(context);
+          },
+        ),
+        IconButton(
           icon: Icon(Icons.share_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
           onPressed: () {},
         ),
       ],
+    );
+  }
+
+  void _showEqualizer(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const EqualizerSheet(),
     );
   }
 

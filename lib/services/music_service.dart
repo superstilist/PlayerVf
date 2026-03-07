@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/music_model.dart';
@@ -16,8 +16,8 @@ class MusicService extends ChangeNotifier {
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  late AudioPlayer _audioPlayer;
-  
+  late Player _player;
+   
   // Queue Management
   List<int> _queue = [];
   bool _isShuffle = false;
@@ -43,11 +43,61 @@ class MusicService extends ChangeNotifier {
   bool _isRepeatOne = false;
   bool _isRepeatAll = true;
 
+  // Equalizer state
+  bool _isEqualizerEnabled = false;
+  List<double> _equalizerBandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+  String _currentPreset = 'Normal';
+  
+  // Equalizer frequencies (10-band EQ)
+  static const List<int> _eqFrequencies = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  
+  // Equalizer preset values
+  static const Map<String, List<double>> _eqPresets = {
+    'Normal':    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'Pop':       [-1, 2, 4, 5, 4, 2, 0, -1, -2, -3],
+    'Rock':      [4, 3, 2, 1, -1, -1, 0, 2, 3, 4],
+    'Jazz':      [3, 2, 1, 2, -2, -2, 0, 1, 2, 3],
+    'Classical': [4, 3, 2, 1, -1, -1, 0, 2, 3, 4],
+    'Bass Boost':[6, 5, 4, 3, 1, 0, 0, 0, 0, 0],
+    'Treble Boost':[0, 0, 0, 0, 0, 1, 2, 4, 5, 6],
+    'Electronic':[-2, 0, 2, 4, 5, 4, 2, 0, -1, -2],
+    'Hip Hop':   [5, 4, 3, 1, -1, -2, 0, 1, 2, 3],
+    'Acoustic':  [3, 2, 1, 1, 2, 2, 3, 3, 2, 2],
+  };
+
   MusicService() {
-    _audioPlayer = AudioPlayer();
-    _initAudioPlayer();
+    _player = Player();
+    _initPlayer();
     _loadFavoritesFromCache();
     _loadPlaylistsFromCache();
+    _loadEqualizerSettings();
+  }
+
+  void _initPlayer() {
+    _player.stream.position.listen((position) {
+      _position = position;
+      notifyListeners();
+    });
+
+    _player.stream.duration.listen((duration) {
+      _duration = duration;
+      notifyListeners();
+    });
+
+    _player.stream.completed.listen((completed) {
+      if (completed) {
+        if (_isRepeatOne) {
+          play();
+        } else {
+          next();
+        }
+      }
+    });
+
+    _player.stream.playing.listen((playing) {
+      _isPlaying = playing;
+      notifyListeners();
+    });
   }
 
   // Getters
@@ -63,6 +113,11 @@ class MusicService extends ChangeNotifier {
   bool get isShuffle => _isShuffle;
   bool get isRepeatOne => _isRepeatOne;
   bool get isRepeatAll => _isRepeatAll;
+  
+  // Equalizer getters
+  bool get isEqualizerEnabled => _isEqualizerEnabled;
+  List<double> get equalizerBandValues => _equalizerBandValues;
+  String get currentPreset => _currentPreset;
 
   String? get currentPlaylistId => _currentPlaylistId;
   set currentPlaylistId(String? id) {
@@ -77,7 +132,6 @@ class MusicService extends ChangeNotifier {
 
   List<Music> get favoriteMusicList => _musicList.where((m) => m.isFavorite).toList();
 
-  // System Playlists
   List<Playlist> get systemPlaylists {
     return [
       Playlist(id: 'favorites', name: 'Favorites', createdAt: DateTime.now(), updatedAt: DateTime.now()),
@@ -119,31 +173,6 @@ class MusicService extends ChangeNotifier {
       _currentIndex = index;
       notifyListeners();
     }
-  }
-
-  void _initAudioPlayer() {
-    _audioPlayer.onPositionChanged.listen((position) {
-      _position = position;
-      notifyListeners();
-    });
-
-    _audioPlayer.onDurationChanged.listen((duration) {
-      _duration = duration;
-      notifyListeners();
-    });
-
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (_isRepeatOne) {
-        play();
-      } else {
-        next();
-      }
-    });
-
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      _isPlaying = state == PlayerState.playing;
-      notifyListeners();
-    });
   }
 
   List<Music> getMusicListForPlaylist(String playlistId) {
@@ -236,12 +265,14 @@ class MusicService extends ChangeNotifier {
 
     try {
       final filePath = _musicList[_currentIndex].filePath;
-      await _audioPlayer.stop();
-      await _audioPlayer.play(DeviceFileSource(filePath));
+      await _player.open(Media(filePath));
       _isPlaying = true;
       
       _musicList[_currentIndex].playCount++;
       _musicList[_currentIndex].lastPlayed = DateTime.now();
+      
+      // Apply equalizer settings to the new track
+      _applyEqualizerSettings();
       
       refreshSystemPlaylists();
       _saveStats();
@@ -283,15 +314,7 @@ class MusicService extends ChangeNotifier {
   }
 
   Future<void> togglePlayPause() async {
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      if (_audioPlayer.state == PlayerState.paused) {
-        await _audioPlayer.resume();
-      } else {
-        await play();
-      }
-    }
+    await _player.playOrPause();
     notifyListeners();
   }
 
@@ -305,7 +328,7 @@ class MusicService extends ChangeNotifier {
       } else if (_isRepeatAll) {
         _currentIndex = _queue[0];
       } else {
-        await _audioPlayer.stop();
+        await _player.stop();
         _isPlaying = false;
         notifyListeners();
         return;
@@ -316,7 +339,7 @@ class MusicService extends ChangeNotifier {
       } else if (_isRepeatAll) {
         _currentIndex = 0;
       } else {
-        await _audioPlayer.stop();
+        await _player.stop();
         _isPlaying = false;
         notifyListeners();
         return;
@@ -329,7 +352,7 @@ class MusicService extends ChangeNotifier {
     if (_musicList.isEmpty) return;
 
     if (_position.inSeconds > 3) {
-      await _audioPlayer.seek(Duration.zero);
+      await _player.seek(Duration.zero);
       return;
     }
 
@@ -351,7 +374,7 @@ class MusicService extends ChangeNotifier {
   }
 
   Future<void> seekTo(Duration pos) async {
-    await _audioPlayer.seek(pos);
+    await _player.seek(pos);
     notifyListeners();
   }
 
@@ -501,10 +524,110 @@ class MusicService extends ChangeNotifier {
     notifyListeners();
     await loadSystemMusic();
   }
+  
+  // Equalizer methods - stores settings for UI and applies them to playback
+  Future<void> setEqualizerEnabled(bool enabled) async {
+    _isEqualizerEnabled = enabled;
+    debugPrint('Equalizer enabled: $enabled');
+    await _saveEqualizerSettings();
+    _applyEqualizerSettings();
+    notifyListeners();
+  }
+  
+  Future<void> setEqualizerBand(int band, double value) async {
+    if (band >= 0 && band < _equalizerBandValues.length) {
+      _equalizerBandValues[band] = value;
+      _currentPreset = 'Custom';
+      debugPrint('Equalizer band $band set to $value');
+      await _saveEqualizerSettings();
+      _applyEqualizerSettings();
+      notifyListeners();
+    }
+  }
+  
+  Future<void> setEqualizerPreset(String preset) async {
+    _currentPreset = preset;
+    
+    if (_eqPresets.containsKey(preset)) {
+      _equalizerBandValues = List.from(_eqPresets[preset]!);
+      debugPrint('Equalizer preset set to $preset');
+    }
+    
+    await _saveEqualizerSettings();
+    _applyEqualizerSettings();
+    notifyListeners();
+  }
+  
+  /// Apply current equalizer settings to the audio player
+  /// media_kit uses FFmpeg filters for high-quality cross-platform EQ
+  void _applyEqualizerSettings() {
+    if (_isEqualizerEnabled) {
+      debugPrint('Applying equalizer: $_equalizerBandValues');
+      // Create FFmpeg equalizer filter string
+      // Format: equalizer=f=FREQ:width_type=o:w=1:g=GAIN
+      final filterString = _eqFrequencies.asMap().entries.map((entry) {
+        final index = entry.key;
+        final freq = entry.value;
+        final gain = _equalizerBandValues[index];
+        return 'equalizer=f=$freq:width_type=o:w=1:g=$gain';
+      }).join(',');
+      
+      if (_player.platform is NativePlayer) {
+        (_player.platform as NativePlayer).setProperty('af', filterString);
+      }
+    } else {
+      debugPrint('Equalizer disabled, using flat EQ');
+      if (_player.platform is NativePlayer) {
+        (_player.platform as NativePlayer).setProperty('af', ''); // Clear filters
+      }
+    }
+  }
+  
+  /// Save equalizer settings to persistent storage
+  Future<void> _saveEqualizerSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('eq_enabled', _isEqualizerEnabled);
+      await prefs.setStringList('eq_band_values', _equalizerBandValues.map((e) => e.toString()).toList());
+      await prefs.setString('eq_current_preset', _currentPreset);
+    } catch (e) {
+      if (kDebugMode) print('Failed to save equalizer settings: $e');
+    }
+  }
+  
+  /// Load equalizer settings from persistent storage
+  Future<void> _loadEqualizerSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isEqualizerEnabled = prefs.getBool('eq_enabled') ?? false;
+      
+      final bandValuesStr = prefs.getStringList('eq_band_values');
+      if (bandValuesStr != null && bandValuesStr.length == 10) {
+        _equalizerBandValues = bandValuesStr.map((e) => double.tryParse(e) ?? 0.0).toList();
+      }
+      
+      _currentPreset = prefs.getString('eq_current_preset') ?? 'Normal';
+      debugPrint('Loaded equalizer settings: enabled=$_isEqualizerEnabled, preset=$_currentPreset');
+      
+      _applyEqualizerSettings();
+    } catch (e) {
+      if (kDebugMode) print('Failed to load equalizer settings: $e');
+    }
+  }
+  
+  /// Get available equalizer band frequencies
+  List<int> getEqualizerFrequencies() {
+    return _eqFrequencies;
+  }
+  
+  /// Get available equalizer presets
+  List<String> getEqualizerPresets() {
+    return _eqPresets.keys.toList();
+  }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    _player.dispose();
     super.dispose();
   }
 }

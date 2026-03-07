@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'pages/home_screen.dart';
 import 'pages/favorite_page.dart';
@@ -13,9 +14,10 @@ import 'models/settings_model.dart';
 import 'services/responsive.dart';
 import 'widgets/cover_art_texture.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+  MediaKit.ensureInitialized();
+
   if (Platform.isWindows || Platform.isLinux) {
     // Initialize FFI
     sqfliteFfiInit();
@@ -238,23 +240,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
               height: 1.h,
               color: theme.colorScheme.onSurface.withOpacity(0.1),
             ),
-            
+
             AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
               height: _isSearchOpen ? 60.h : 0,
               child: _isSearchOpen ? _buildExpandedSearchBar(theme) : null,
             ),
-            
+
             // Horizontal separator line between search and main content
             Container(
               height: 1.h,
               color: theme.colorScheme.onSurface.withOpacity(0.1),
             ),
-            
+
             // Additional margin before main content
             SizedBox(height: 24.h),
-            
+
             // Main content with fade-in animation
             Expanded(
               child: Stack(
@@ -286,7 +288,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                       children: _screens,
                     ),
                   ),
-                  
+
                   // Full-screen player overlay with slide animation
                   SlideTransition(
                     position: _playerSlideAnimation,
