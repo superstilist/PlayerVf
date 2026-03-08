@@ -40,6 +40,10 @@ dependencies:
   sqflite_common_ffi: ^2.3.3
   sqlite3_flutter_libs: ^0.5.41
 
+
+
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

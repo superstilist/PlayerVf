@@ -7,7 +7,6 @@ import 'package:media_kit/media_kit.dart' hide Playlist;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/music_model.dart';
-import '../models/cover_model.dart';
 import '../models/playlist_model.dart';
 import 'music_scanner_service.dart';
 
@@ -20,6 +19,11 @@ class MusicService extends ChangeNotifier {
   Duration _duration = Duration.zero;
   late final Player _player;
   
+  // Separate ValueNotifiers for playback state to avoid full rebuilds
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
+  
   // Performance State
   DateTime _lastPositionUpdate = DateTime.now();
   Timer? _saveSettingsTimer;
@@ -27,7 +31,6 @@ class MusicService extends ChangeNotifier {
   bool _isShuffle = false;
   bool _isLoadingSystemMusic = false;
   int _systemMusicCount = 0;
-  String _currentScanPath = '';
   
   List<Music> _cachedDailyMix = [];
   List<Music> _cachedMostListened = [];
@@ -37,7 +40,7 @@ class MusicService extends ChangeNotifier {
   bool _isRepeatOne = false;
   bool _isRepeatAll = true;
 
-  // --- Audio Effects State ---
+  // Audio Effects
   bool _isEffectsEnabled = true;
   bool _isEqualizerEnabled = false;
   List<double> _globalEqValues = List.filled(10, 0.0);
@@ -48,7 +51,6 @@ class MusicService extends ChangeNotifier {
   Map<String, dynamic> _songSettings = {};
   bool _useSongSpecificSettings = false;
 
-  // Engine Optimization Buffers
   String? _lastAppliedAf;
   bool _isUpdatingEffects = false;
   bool _hasPendingUpdate = false;
@@ -67,11 +69,6 @@ class MusicService extends ChangeNotifier {
     'Acoustic':  [3, 2, 1, 1, 2, 2, 3, 3, 2, 2],
   };
 
-  // Cache File Constants
-  static const String _favoritesCacheFile = 'favorites.json';
-  static const String _playlistsCacheFile = 'playlists.json';
-  static const String _statsCacheFile = 'music_stats.json';
-
   MusicService() {
     _player = Player(configuration: const PlayerConfiguration(bufferSize: 32 * 1024 * 1024));
     _initPlayer();
@@ -81,15 +78,24 @@ class MusicService extends ChangeNotifier {
   void _initPlayer() {
     _player.stream.position.listen((pos) {
       final now = DateTime.now();
-      if (now.difference(_lastPositionUpdate).inMilliseconds > 250) {
+      if (now.difference(_lastPositionUpdate).inMilliseconds > 500) {
         _position = pos;
+        _positionNotifier.value = pos; // Update ValueNotifier for efficient rebuilds
         _lastPositionUpdate = now;
-        notifyListeners();
+        // Don't call notifyListeners() for position updates - use ValueListenableBuilder instead
       }
     });
-    _player.stream.duration.listen((dur) { _duration = dur; notifyListeners(); });
+    _player.stream.duration.listen((dur) { 
+      _duration = dur; 
+      _durationNotifier.value = dur; // Update ValueNotifier for efficient rebuilds
+      // Don't call notifyListeners() here - UI will rebuild via ValueListenableBuilder
+    });
     _player.stream.completed.listen((done) { if (done) next(); });
-    _player.stream.playing.listen((state) { _isPlaying = state; notifyListeners(); });
+    _player.stream.playing.listen((state) { 
+      _isPlaying = state; 
+      _playingNotifier.value = state; // Update ValueNotifier for efficient rebuilds
+      // Don't call notifyListeners() here - UI will rebuild via ValueListenableBuilder
+    });
   }
 
   // --- Getters ---
@@ -99,9 +105,13 @@ class MusicService extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   Duration get position => _position;
   Duration get duration => _duration;
+  
+  // ValueNotifiers for efficient UI updates without full rebuilds
+  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
+  ValueNotifier<Duration> get durationNotifier => _durationNotifier;
+  ValueNotifier<bool> get playingNotifier => _playingNotifier;
   bool get isLoadingSystemMusic => _isLoadingSystemMusic;
   int get systemMusicCount => _systemMusicCount;
-  String get currentScanPath => _currentScanPath;
   List<Playlist> get playlists => _playlists;
   bool get isShuffle => _isShuffle;
   bool get isRepeatOne => _isRepeatOne;
@@ -132,7 +142,6 @@ class MusicService extends ChangeNotifier {
   ];
   List<Playlist> get allPlaylists => [...systemPlaylists, ..._playlists];
 
-  // --- Setters ---
   set currentIndex(int index) {
     if (index >= 0 && index < _musicList.length) { _currentIndex = index; notifyListeners(); }
   }
@@ -196,6 +205,8 @@ class MusicService extends ChangeNotifier {
     }
   }
 
+  List<String>? _lastUsedPaths;
+
   // --- Core Methods ---
   Future<void> play() async {
     if (_musicList.isEmpty) return;
@@ -203,10 +214,11 @@ class MusicService extends ChangeNotifier {
       await _player.open(Media(_musicList[_currentIndex].filePath));
       _musicList[_currentIndex].playCount++;
       _musicList[_currentIndex].lastPlayed = DateTime.now();
-      _lastAppliedAf = null; // Force refresh on new track
+      _lastAppliedAf = null; 
       _scheduleUpdate();
-      refreshSystemPlaylists(); // Trigger algorithmic updates
+      // Don't call refreshSystemPlaylists() here - it's expensive and triggers rebuilds
       _saveStats();
+      // Only notify listeners when actually needed
       notifyListeners();
     } catch (e) { debugPrint('Play Error: $e'); }
   }
@@ -247,24 +259,63 @@ class MusicService extends ChangeNotifier {
   }
 
   // --- Library Management ---
-  Future<void> loadSystemMusic() async {
+  Future<void> loadSystemMusic({List<String>? customPaths, bool clearExisting = true}) async {
     if (_isLoadingSystemMusic) return;
-    _isLoadingSystemMusic = true; notifyListeners();
-    await MusicScannerService.startScanning(onBatchUpdate: (batch) {
-      _musicList.addAll(batch); _systemMusicCount = _musicList.length;
-      if (_musicList.length % 50 == 0) notifyListeners();
-    });
-    await _loadStats(); await _loadFavoritesFromCache();
-    _isLoadingSystemMusic = false; _generateShuffleQueue(); 
+
+    final hasPermission = await MusicScannerService.checkPermissions();
+    if (!hasPermission) return;
+
+    _isLoadingSystemMusic = true;
+    if (customPaths != null) _lastUsedPaths = customPaths;
+    
+    if (clearExisting) {
+      _musicList = [];
+      _systemMusicCount = 0;
+    }
+    notifyListeners();
+    
+    // Use a timer to throttle notifyListeners during scanning
+    Timer? throttleTimer;
+    
+    await MusicScannerService.startScanning(
+      customPaths: customPaths ?? _lastUsedPaths,
+      onBatchUpdate: (batch) {
+        bool changed = false;
+        for (var m in batch) {
+          if (!_musicList.any((existing) => existing.filePath == m.filePath)) {
+            _musicList.add(m);
+            changed = true;
+          }
+        }
+        
+        if (changed) {
+          _systemMusicCount = _musicList.length;
+          // Throttle UI updates
+          if (throttleTimer == null || !throttleTimer!.isActive) {
+            notifyListeners();
+            throttleTimer = Timer(const Duration(milliseconds: 500), () {});
+          }
+        }
+      }
+    );
+
+    throttleTimer?.cancel();
+    await _loadStats(); 
+    await _loadFavoritesFromCache();
+    
+    _isLoadingSystemMusic = false; 
+    _generateShuffleQueue(); 
     refreshSystemPlaylists();
     notifyListeners();
   }
 
   Future<void> clearCache() async {
-    await MusicScannerService.cleanupCache(); _musicList = []; _systemMusicCount = 0;
-    notifyListeners(); await loadSystemMusic();
+    _musicList = []; _systemMusicCount = 0;
+    notifyListeners(); 
+    await loadSystemMusic(customPaths: _lastUsedPaths);
   }
 
+  // ... (Rest of logic) ...
   void deleteMusic(int idx) {
     if (idx >= 0 && idx < _musicList.length) {
       _musicList.removeAt(idx);
@@ -278,89 +329,55 @@ class MusicService extends ChangeNotifier {
     if (idx != -1) {
       final old = _musicList[idx];
       final neu = Music(id: old.id, title: t, artist: a, album: al, genre: g, filePath: old.filePath, coverPath: old.coverPath, duration: old.duration, isFavorite: old.isFavorite, playCount: old.playCount, lastPlayed: old.lastPlayed);
-      _musicList[idx] = neu; await MusicScannerService.cacheMusic(neu, File(neu.filePath)); notifyListeners();
+      _musicList[idx] = neu; notifyListeners();
     }
   }
 
-  // --- Algorithmic System Playlists ---
-
   void refreshSystemPlaylists() {
     if (_musicList.isEmpty) return;
-
-    // 1. EARLY LISTENED (History - Max 10)
     final history = List<Music>.from(_musicList)
       ..where((m) => m.lastPlayed != null).toList()
       ..sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
     _cachedEarlyListened = history.take(10).toList();
-
-    // 2. MOST LISTENED (Top Played - Max 5)
     final topPlayed = List<Music>.from(_musicList)
       ..where((m) => m.playCount > 0).toList()
       ..sort((a, b) => b.playCount.compareTo(a.playCount));
     _cachedMostListened = topPlayed.take(5).toList();
-
-    // 3. DAILY MIX (AI-Algorithm based on Metadata)
     _cachedDailyMix = _generateDailyMix();
-    
     notifyListeners();
   }
 
   List<Music> _generateDailyMix() {
     if (_musicList.isEmpty) return [];
-    
-    // Pick the top 3 favorite genres based on play count
     final genreScores = <String, int>{};
     for (var m in _musicList) {
-      if (m.playCount > 0) {
-        genreScores[m.genre] = (genreScores[m.genre] ?? 0) + m.playCount;
-      }
+      if (m.playCount > 0) genreScores[m.genre] = (genreScores[m.genre] ?? 0) + m.playCount;
     }
-
-    final sortedGenres = genreScores.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
+    final sortedGenres = genreScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final topGenres = sortedGenres.take(3).map((e) => e.key).toList();
-    
     final Set<Music> mix = {};
-    
-    // Mix strategy:
-    // 40% from top genres
-    // 30% most played
-    // 30% completely random discovery
-    
     if (topGenres.isNotEmpty) {
       final genrePool = _musicList.where((m) => topGenres.contains(m.genre)).toList()..shuffle();
       mix.addAll(genrePool.take(10));
     }
-
-    final topPool = List<Music>.from(_cachedMostListened)..shuffle();
-    mix.addAll(topPool.take(5));
-
     final discoveryPool = List<Music>.from(_musicList)..shuffle();
-    mix.addAll(discoveryPool.take(10));
-
-    final finalMix = mix.toList()..shuffle();
-    return finalMix.take(25).toList();
+    mix.addAll(discoveryPool.take(15));
+    return mix.toList()..shuffle();
   }
 
-  // --- Playlist Management ---
   Future<void> createPlaylist(String name) async {
     _playlists.add(Playlist(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name, musicIds: [], createdAt: DateTime.now(), updatedAt: DateTime.now()));
     await _savePlaylists(); notifyListeners();
   }
-
   void deletePlaylist(String id) { _playlists.removeWhere((p) => p.id == id); _savePlaylists(); notifyListeners(); }
-  
   void addMusicToPlaylist(String plId, String mId) {
     final pl = _playlists.firstWhere((p) => p.id == plId);
     if (!pl.musicIds.contains(mId)) { pl.musicIds.add(mId); _savePlaylists(); notifyListeners(); }
   }
-
   void removeMusicFromPlaylist(String plId, String mId) {
     int idx = _playlists.indexWhere((p) => p.id == plId);
     if (idx != -1) { _playlists[idx].musicIds.remove(mId); _savePlaylists(); notifyListeners(); }
   }
-
   void playPlaylist(String id) {
     final list = getMusicListForPlaylist(id);
     if (list.isNotEmpty) {
@@ -370,7 +387,6 @@ class MusicService extends ChangeNotifier {
       play();
     }
   }
-
   List<Music> getMusicListForPlaylist(String id) {
     if (id == 'favorites') return favoriteMusicList;
     if (id == 'most_listened') return _cachedMostListened;
@@ -380,26 +396,20 @@ class MusicService extends ChangeNotifier {
     return _musicList.where((m) => pl.musicIds.contains(m.id)).toList();
   }
 
-  List<Cover> getCoverListForPlaylist(String id) => List.generate(getMusicListForPlaylist(id).length, (_) => Cover());
-
-  // --- Persistence ---
   Future<void> _loadAllData() async {
     await Future.wait([_loadFavoritesFromCache(), _loadPlaylistsFromCache(), _loadAudioEffectsSettings(), _loadStats()]);
     refreshSystemPlaylists();
   }
-
   void _saveDebounced() {
     _saveSettingsTimer?.cancel();
     _saveSettingsTimer = Timer(const Duration(seconds: 2), () => _saveAudioEffectsSettings());
   }
-
   Future<void> _saveAudioEffectsSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('master_eff', _isEffectsEnabled);
     await prefs.setString('song_eff_map', jsonEncode(_songSettings));
     await prefs.setStringList('glob_eq', _globalEqValues.map((e) => e.toString()).toList());
   }
-
   Future<void> _loadAudioEffectsSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _isEffectsEnabled = prefs.getBool('master_eff') ?? true;
@@ -407,51 +417,45 @@ class MusicService extends ChangeNotifier {
     if (eqList != null) _globalEqValues = eqList.map((e) => double.tryParse(e) ?? 0.0).toList();
     _scheduleUpdate();
   }
-
   Future<void> _loadFavoritesFromCache() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_favoritesCacheFile');
+    final file = File('${dir.path}/favorites.json');
     if (await file.exists()) {
       final ids = jsonDecode(await file.readAsString()).cast<String>();
       for (var m in _musicList) m.isFavorite = ids.contains(m.id);
       notifyListeners();
     }
   }
-
   Future<void> toggleFavorite(String id) async {
     final m = _musicList.firstWhere((m) => m.id == id);
     m.isFavorite = !m.isFavorite; notifyListeners();
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_favoritesCacheFile');
+    final file = File('${dir.path}/favorites.json');
     final ids = _musicList.where((m) => m.isFavorite).map((m) => m.id).toList();
     await file.writeAsString(jsonEncode(ids));
   }
-
   Future<void> _loadPlaylistsFromCache() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_playlistsCacheFile');
+    final file = File('${dir.path}/playlists.json');
     if (await file.exists()) {
       final data = jsonDecode(await file.readAsString()) as List;
       _playlists = data.map((j) => Playlist.fromJson(j)).toList();
       notifyListeners();
     }
   }
-
   Future<void> _savePlaylists() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_playlistsCacheFile');
+    final file = File('${dir.path}/playlists.json');
     await file.writeAsString(jsonEncode(_playlists.map((p) => p.toJson()).toList()));
   }
-
   Future<void> _saveStats() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_statsCacheFile');
+    final file = File('${dir.path}/music_stats.json');
     await file.writeAsString(jsonEncode(_musicList.map((m) => m.toJson()).toList()));
   }
-
   Future<void> _loadStats() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$_statsCacheFile');
+    final file = File('${dir.path}/music_stats.json');
     if (await file.exists()) {
       final data = jsonDecode(await file.readAsString()) as List;
       for (var item in data) {
@@ -460,10 +464,15 @@ class MusicService extends ChangeNotifier {
       }
     }
   }
-
   List<int> getEqualizerFrequencies() => _eqFreqs;
   List<String> getEqualizerPresets() => _eqPresets.keys.toList();
-
   @override
-  void dispose() { _player.dispose(); _saveSettingsTimer?.cancel(); super.dispose(); }
+  void dispose() { 
+    _player.dispose(); 
+    _saveSettingsTimer?.cancel();
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _playingNotifier.dispose();
+    super.dispose(); 
+  }
 }

@@ -52,6 +52,7 @@ class MusicCard extends StatelessWidget {
                 // Cover art
                 CoverArtTexture(
                   coverArtPath: music.coverPath,
+                  musicId: music.id,
                   width: double.infinity,
                   height: double.infinity,
                 ),

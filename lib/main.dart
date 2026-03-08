@@ -29,7 +29,17 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider<SettingsModel>(create: (_) => SettingsModel()),
-        ChangeNotifierProvider<MusicService>(create: (_) => MusicService()..loadSystemMusic()),
+        ChangeNotifierProxyProvider<SettingsModel, MusicService>(
+          create: (_) => MusicService(),
+          update: (_, settings, musicService) {
+            // Trigger initial scan ONLY if not already loading and list is empty
+            // Use a flag to avoid repetitive triggers from ProxyProvider
+            if (!musicService!.isLoadingSystemMusic && musicService.musicList.isEmpty) {
+              Future.microtask(() => musicService.loadSystemMusic(customPaths: settings.musicSourcePaths));
+            }
+            return musicService;
+          },
+        ),
       ],
       child: const MyApp(),
     ),
@@ -429,6 +439,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                   borderRadius: BorderRadius.circular(8.s),
                   child: CoverArtTexture(
                     coverArtPath: currentMusic?.coverPath ?? '',
+                    musicId: currentMusic?.id,
                     width: 48.s,
                     height: 48.s,
                   ),

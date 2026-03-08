@@ -1,98 +1,157 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:convert';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:crypto/crypto.dart';
+import 'package:on_audio_query/on_audio_query.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:path/path.dart' as p;
 import '../models/music_model.dart';
 import 'id3_parser.dart';
 
-class MusicScannerService {
-  static final ID3Parser _parser = ID3Parser();
+class _ScanTask {
+  final List<String> roots;
+  final SendPort sendPort;
+  _ScanTask(this.roots, this.sendPort);
+}
 
-  /// Scans system music folders using background processing.
+class MusicScannerService {
+  static final OnAudioQuery _audioQuery = OnAudioQuery();
+
+  /// Comprehensive permission check
+  static Future<bool> checkPermissions() async {
+    if (kIsWeb) return true;
+    if (Platform.isAndroid) {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      if (androidInfo.version.sdkInt >= 33) {
+        final status = await Permission.audio.request();
+        return status.isGranted;
+      } else {
+        final status = await Permission.storage.request();
+        return status.isGranted;
+      }
+    }
+    return true;
+  }
+
+  /// FULL REWORK: Isolate-based scanning to prevent UI freezing
   static Future<void> startScanning({
     required Function(List<Music>) onBatchUpdate,
+    List<String>? customPaths,
   }) async {
-    final List<Directory> scanDirs = [];
-    
-    if (Platform.isWindows) {
-      final userProfile = Platform.environment['USERPROFILE'];
-      if (userProfile != null) {
-        final musicDir = Directory('$userProfile\\Music');
-        if (await musicDir.exists()) scanDirs.add(musicDir);
+    final Set<String> seenPaths = {};
+
+    // 1. Android MediaStore Scan (Near-instant)
+    if (Platform.isAndroid && (customPaths == null || customPaths.isEmpty)) {
+      try {
+        final songs = await _audioQuery.querySongs(
+          uriType: UriType.EXTERNAL,
+          ignoreCase: true,
+        );
+        
+        final List<Music> systemBatch = [];
+        for (var song in songs) {
+          if ((song.duration ?? 0) < 5000) continue;
+          seenPaths.add(song.data);
+          systemBatch.add(Music(
+            id: song.id.toString(),
+            title: song.title,
+            artist: song.artist ?? 'Unknown Artist',
+            album: song.album ?? 'Unknown Album',
+            genre: song.genre ?? 'Unknown',
+            filePath: song.data,
+            coverPath: '', // NO CACHING
+            duration: song.duration != null ? Duration(milliseconds: song.duration!) : null,
+            dateAdded: song.dateAdded != null 
+                ? DateTime.fromMillisecondsSinceEpoch(song.dateAdded! * 1000) 
+                : DateTime.now(),
+          ));
+          
+          if (systemBatch.length >= 50) {
+            onBatchUpdate(List.from(systemBatch));
+            systemBatch.clear();
+          }
+        }
+        if (systemBatch.isNotEmpty) onBatchUpdate(systemBatch);
+      } catch (e) {
+        debugPrint('MediaStore Scan Error: $e');
       }
-    } else if (Platform.isAndroid) {
-      final musicDir = Directory('/storage/emulated/0/Music');
-      if (await musicDir.exists()) scanDirs.add(musicDir);
     }
 
-    final List<Music> batch = [];
-    const int batchSize = 10;
+    // 2. Custom Folders / Desktop (Background Isolate)
+    final roots = <String>[];
+    if (customPaths != null && customPaths.isNotEmpty) {
+      roots.addAll(customPaths);
+    } else if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      if (userProfile != null) roots.add(p.join(userProfile, 'Music'));
+    }
 
-    for (final dir in scanDirs) {
+    if (roots.isNotEmpty) {
+      final receivePort = ReceivePort();
+      await Isolate.spawn(_isolateScanner, _ScanTask(roots, receivePort.sendPort));
+
+      await for (final message in receivePort) {
+        if (message is List<Music>) {
+          final filteredBatch = message.where((m) => !seenPaths.contains(m.filePath)).toList();
+          for (var m in filteredBatch) seenPaths.add(m.filePath);
+          if (filteredBatch.isNotEmpty) onBatchUpdate(filteredBatch);
+        } else if (message == "DONE") {
+          receivePort.close();
+          break;
+        }
+      }
+    }
+  }
+
+  /// The Isolate entry point
+  static void _isolateScanner(_ScanTask task) async {
+    final List<String> audioExts = ['.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.opus'];
+    final parser = ID3Parser();
+    final List<Music> batch = [];
+
+    for (final root in task.roots) {
+      final dir = Directory(root);
+      if (!dir.existsSync()) continue;
+
       try {
-        await for (final entity in dir.list(recursive: true, followLinks: false)) {
-          if (entity is File && _isAudioFile(entity.path)) {
-            try {
-              // Offload to background isolate
-              final music = await _parseMetadata(entity.path);
-              if (music != null) {
+        final entities = dir.listSync(recursive: true, followLinks: true);
+        for (final entity in entities) {
+          if (entity is File) {
+            final ext = p.extension(entity.path).toLowerCase();
+            if (audioExts.contains(ext)) {
+              try {
+                // We use a simplified parser here if needed or full one
+                // Since we are in isolate, we can do heavy work
+                final tags = await parser.parseTagsFromFile(entity.path);
+                final music = parser.createMusicFromTags(entity.path, tags);
+                
                 batch.add(music);
-                if (batch.length >= batchSize) {
-                  onBatchUpdate(List.from(batch));
+                if (batch.length >= 20) {
+                  task.sendPort.send(List<Music>.from(batch));
                   batch.clear();
                 }
+              } catch (e) {
+                // Skip files with errors
               }
-            } catch (e) {
-              debugPrint('Error parsing ${entity.path}: $e');
             }
           }
         }
       } catch (e) {
-        debugPrint('Error listing directory ${dir.path}: $e');
+        // Skip inaccessible directories
       }
     }
-    
-    if (batch.isNotEmpty) onBatchUpdate(batch);
+
+    if (batch.isNotEmpty) task.sendPort.send(batch);
+    task.sendPort.send("DONE");
   }
 
-  static bool _isAudioFile(String path) {
-    final ext = path.toLowerCase();
-    return ext.endsWith('.mp3') || ext.endsWith('.m4a') || ext.endsWith('.wav') || ext.endsWith('.flac');
-  }
-
-  static Future<Music?> _parseMetadata(String filePath) async {
-    try {
-      final tags = await _parser.parseTagsFromFile(filePath);
-      final cacheDir = await getTemporaryDirectory();
-      return _parser.createMusicFromTags(filePath, tags, coverDirectory: cacheDir.path);
-    } catch (e) {
-      debugPrint('Metadata parse error: $e');
-      return null;
-    }
-  }
-
-  /// Clears the local metadata cache.
   static Future<void> cleanupCache() async {
-    try {
-      final cacheDir = await getTemporaryDirectory();
-      if (await cacheDir.exists()) {
-        await for (final entity in cacheDir.list()) {
-          if (entity is File && entity.path.contains('_cover.jpg')) {
-            await entity.delete();
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Cleanup error: $e');
-    }
+    // No-op as we moved to native display
   }
 
-  /// Manually caches/updates music metadata.
   static Future<void> cacheMusic(Music music, File file) async {
-    // This could update a local DB if implemented. 
-    // For now, it just ensures the cover is extracted.
-    await _parseMetadata(file.path);
+    // Manual trigger - could be used to force metadata refresh
   }
 }

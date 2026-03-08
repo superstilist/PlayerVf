@@ -507,44 +507,13 @@ class ID3Parser {
     return null;
   }
 
-  // Cover cache to avoid redundant cover art extraction and writing
-  static final Map<String, String> _coverCache = {};
-
   // ----------------------------
-  // Create Music model from parsed tags. If cover exists, write to permanent file and set coverPath.
+  // Create Music model from parsed tags.
   Music createMusicFromTags(String filePath, Map<String, dynamic> tags, {String? coverDirectory}) {
     final fileName = path.basenameWithoutExtension(filePath);
-    String coverPath = '';
-
-    try {
-      // Check if cover already exists in cache
-      if (_coverCache.containsKey(filePath)) {
-        coverPath = _coverCache[filePath]!;
-      } else {
-        final coverBytes = extractCover(tags);
-        if (coverBytes != null && coverBytes.isNotEmpty) {
-          // Use a hash of the file path for the cover filename to ensure it's unique and stable
-          final hash = md5.convert(utf8.encode(filePath)).toString();
-          
-          final io.Directory dir = coverDirectory != null 
-              ? io.Directory(coverDirectory) 
-              : io.Directory.systemTemp;
-          
-          if (!dir.existsSync()) {
-            dir.createSync(recursive: true);
-          }
-          
-          final coverFile = io.File('${dir.path}/${hash}_cover.jpg');
-          if (!coverFile.existsSync()) {
-            coverFile.writeAsBytesSync(coverBytes);
-          }
-          coverPath = coverFile.path;
-          _coverCache[filePath] = coverPath; // Cache the cover path
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) print('Failed to write cover file: $e');
-    }
+    
+    // We no longer extract and save covers here to prevent freezing and low quality.
+    // UI will handle high-quality native display via on_audio_query.
 
     return Music(
       id: fileName,
@@ -553,7 +522,7 @@ class ID3Parser {
       album: tags['album']?.toString() ?? 'Unknown Album',
       genre: tags['genre']?.toString() ?? 'Unknown',
       filePath: filePath,
-      coverPath: coverPath,
+      coverPath: '', // Intentionally empty to trigger native fallback in UI
     );
   }
 
