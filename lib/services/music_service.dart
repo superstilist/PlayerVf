@@ -158,15 +158,56 @@ class MusicService extends ChangeNotifier {
   set currentPlaylistId(String? id) { _currentPlaylistId = id; notifyListeners(); }
 
   // --- Audio Effects Engine ---
-  void setEffectsEnabled(bool v) { _isEffectsEnabled = v; _scheduleUpdate(); notifyListeners(); }
-  void setEqualizerEnabled(bool v) { _isEqualizerEnabled = v; _scheduleUpdate(); notifyListeners(); }
-  void setUseSongSpecificSettings(bool v) { _useSongSpecificSettings = v; _scheduleUpdate(); notifyListeners(); }
-  void setPitch(double v) { _pitch = v; _scheduleUpdate(); notifyListeners(); }
-  void setSpeed(double v) { _speed = v; _scheduleUpdate(); notifyListeners(); }
-  void setReverb(double v) { _reverb = v; _scheduleUpdate(); notifyListeners(); }
+  void setEffectsEnabled(bool v) { 
+    _isEffectsEnabled = v; 
+    notifyListeners(); // Notify first for immediate UI feedback
+    _scheduleUpdate(); 
+    _saveDebounced();
+  }
+  
+  void setEqualizerEnabled(bool v) { 
+    _isEqualizerEnabled = v; 
+    if (v) _isEffectsEnabled = true; // Auto-enable master
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced();
+  }
+  
+  void setUseSongSpecificSettings(bool v) { 
+    _useSongSpecificSettings = v; 
+    notifyListeners();
+    _scheduleUpdate(); 
+  }
+  
+  void setPitch(double v) { 
+    _pitch = v; 
+    _isEffectsEnabled = true; // Auto-enable master on adjustment
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced();
+  }
+  
+  void setSpeed(double v) { 
+    _speed = v; 
+    _isEffectsEnabled = true; // Auto-enable master on adjustment
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced();
+  }
+  
+  void setReverb(double v) { 
+    _reverb = v; 
+    if (v > 0) _isEffectsEnabled = true; // Auto-enable master on adjustment
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced();
+  }
 
   void setEqualizerBand(int band, double val) {
     val = double.parse(val.toStringAsFixed(1));
+    _isEqualizerEnabled = true; // Auto-enable EQ on adjustment
+    _isEffectsEnabled = true; // Auto-enable master on adjustment
+    
     if (_useSongSpecificSettings && currentMusic != null) {
       final id = currentMusic!.id;
       _songSettings[id] ??= {'eq': List.from(_globalEqValues)};
@@ -175,11 +216,17 @@ class MusicService extends ChangeNotifier {
       _globalEqValues[band] = val;
       _currentPreset = 'Custom';
     }
-    _scheduleUpdate(); _saveDebounced(); notifyListeners();
+    
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced(); 
   }
 
   void setEqualizerPreset(String preset) {
     _currentPreset = preset;
+    _isEqualizerEnabled = true; // Auto-enable EQ
+    _isEffectsEnabled = true; // Auto-enable master
+    
     if (_eqPresets.containsKey(preset)) {
       final values = List<double>.from(_eqPresets[preset]!);
       if (_useSongSpecificSettings && currentMusic != null) {
@@ -187,7 +234,10 @@ class MusicService extends ChangeNotifier {
         _songSettings[currentMusic!.id]['eq'] = values;
       } else { _globalEqValues = values; }
     }
-    _scheduleUpdate(); _saveDebounced(); notifyListeners();
+    
+    notifyListeners();
+    _scheduleUpdate(); 
+    _saveDebounced(); 
   }
 
   void _scheduleUpdate() async {
