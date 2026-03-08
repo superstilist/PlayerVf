@@ -1,6 +1,29 @@
 # PlayerV - Modern Music Player
 
+
+
+![Alt text](https://github.com/superstilist/PlayerVf/blob/master/assets/logo.png )
+
+
+
+
+
+
+
+
+
+
 A beautiful, cross-platform music player with a clean interface and powerful features.
+
+
+
+
+
+
+
+
+
+
 
 ## 🎵 What is PlayerV?
 
