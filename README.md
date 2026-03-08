@@ -31,13 +31,13 @@ A beautiful, cross-platform music player with a clean interface and powerful fea
 - Responsive layout for all screen sizes
 - Stunning playlist collages and cover art display
 
-### 📱 Easy to Use
+###  Easy to Use
 - **Auto-scan**: Finds all music files on your device automatically
 - **Smart Search**: Real-time search for songs, artists, and albums
 - **Quick Access**: Favorites and playlists for your most-loved tracks
 - **Smooth Playback**: High-quality audio with gapless playback
 
-### 🎼 Library Management
+###  Library Management
 - **System Playlists**: Smart playlists (Trending, Recent, Favorites)
 - **Custom Playlists**: Create and manage your own playlists
 - **Grid View**: Customizable card sizes and grid layouts
@@ -78,7 +78,7 @@ A beautiful, cross-platform music player with a clean interface and powerful fea
    flutter run -d linux
    ```
 
-## 🛠 Build 
+##  Build 
 
 ```bash
 # Android APK
