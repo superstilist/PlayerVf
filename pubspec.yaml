@@ -38,10 +38,19 @@ dependencies:
   on_audio_query: ^2.9.0
   sqflite_common_ffi: ^2.3.3
   sqlite3_flutter_libs: ^0.5.41
+  media_kit_libs_audio: any
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: "^0.14.4"
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+
 
 flutter:
   uses-material-design: true
