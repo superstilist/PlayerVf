@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'pages/home_screen.dart';
 import 'pages/favorite_page.dart';
@@ -15,6 +16,7 @@ import 'widgets/cover_art_texture.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   
   if (Platform.isWindows || Platform.isLinux) {
     // Initialize FFI

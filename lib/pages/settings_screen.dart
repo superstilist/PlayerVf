@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
+import '../widgets/audio_effects_menu.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -23,6 +24,18 @@ class SettingsScreen extends StatelessWidget {
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             children: [
+              _buildSectionTitle('Audio'),
+              _buildSettingCard(
+                child: ListTile(
+                  leading: const Icon(Icons.equalizer_rounded, color: Colors.teal),
+                  title: const Text('Audio Effects'),
+                  subtitle: const Text('Equalizer, Pitch, Speed, Reverb'),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  onTap: () => showAudioEffectsMenu(context),
+                ),
+              ),
+              const SizedBox(height: 24),
+
               _buildSectionTitle('Theme & Style'),
               _buildSettingCard(
                 child: Column(

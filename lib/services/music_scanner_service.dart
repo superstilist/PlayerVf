@@ -192,25 +192,39 @@ class MusicScannerService {
   /// Scan system music folders and user-defined paths
   static Future<List<String>> scanSystemMusicFolders({
     Function(String)? onProgress,
+    List<String>? customPaths,
   }) async {
     final stopwatch = Stopwatch()..start();
     final Set<String> musicPathsSet = <String>{};
 
-    // Scan user-defined paths from settings
-    final settings = SettingsModel();
-    await settings.loadSettings();
+    // Scan user-defined paths from settings OR customPaths
+    if (customPaths != null && customPaths.isNotEmpty) {
+       final futures = <Future<List<String>>>[];
+       for (final path in customPaths) {
+         onProgress?.call(path);
+         final dir = Directory(path);
+         futures.add(_scanDirectoryIfExists(dir));
+       }
+       final results = await Future.wait(futures);
+       for (final list in results) {
+         musicPathsSet.addAll(list);
+       }
+    } else {
+      final settings = SettingsModel();
+      await settings.loadSettings();
 
-    if (settings.musicSourcePaths.isNotEmpty) {
-      final futures = <Future<List<String>>>[];
-      for (final path in settings.musicSourcePaths) {
-        onProgress?.call(path);
-        final dir = Directory(path);
-        futures.add(_scanDirectoryIfExists(dir));
-      }
+      if (settings.musicSourcePaths.isNotEmpty) {
+        final futures = <Future<List<String>>>[];
+        for (final path in settings.musicSourcePaths) {
+          onProgress?.call(path);
+          final dir = Directory(path);
+          futures.add(_scanDirectoryIfExists(dir));
+        }
 
-      final results = await Future.wait(futures);
-      for (final list in results) {
-        musicPathsSet.addAll(list);
+        final results = await Future.wait(futures);
+        for (final list in results) {
+          musicPathsSet.addAll(list);
+        }
       }
     }
 
@@ -244,7 +258,7 @@ class MusicScannerService {
 
   static Future<List<String>> _scanAndroidMusicWithMediaStore({Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
-    final permissionsGranted = await _requestStoragePermissions();
+    final permissionsGranted = await checkPermissions();
     if (!permissionsGranted) return [];
     try {
       onProgress?.call('Querying audio files...');
@@ -265,7 +279,7 @@ class MusicScannerService {
 
   static Future<List<String>> _scanAndroidMusicFallback({Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
-    final permissionsGranted = await _requestStoragePermissions();
+    final permissionsGranted = await checkPermissions();
     if (!permissionsGranted) return [];
     final List<String> androidMusicDirs = [
       '/storage/emulated/0/Music',
@@ -282,7 +296,7 @@ class MusicScannerService {
     return musicPathsSet.toList();
   }
 
-  static Future<bool> _requestStoragePermissions() async {
+  static Future<bool> checkPermissions() async {
     if (!Platform.isAndroid) return true;
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
@@ -427,11 +441,12 @@ class MusicScannerService {
   static Future<List<Music>> startScanning({
     Function(String)? onProgress,
     Function(List<Music>)? onBatchUpdate,
+    List<String>? customPaths,
   }) async {
     await cancelScanning();
     _scanOperation = CancelableOperation.fromFuture(
           () async {
-        final paths = await scanSystemMusicFolders(onProgress: onProgress);
+        final paths = await scanSystemMusicFolders(onProgress: onProgress, customPaths: customPaths);
         return await createMusicListFromPaths(paths, onBatchUpdate: onBatchUpdate);
       }(),
     );

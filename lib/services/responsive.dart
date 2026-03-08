@@ -55,6 +55,7 @@ class Responsive {
   static double hp(double percent) => screenHeight * (percent / 100);
 
   static bool get isTablet => screenWidth > 600;
+  static bool get isDesktop => screenWidth > 900;
   static bool get isLandscape => _mediaQueryData.orientation == Orientation.landscape;
 }
 

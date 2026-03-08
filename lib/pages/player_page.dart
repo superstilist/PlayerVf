@@ -5,7 +5,7 @@ import '../models/music_model.dart';
 import '../models/cover_model.dart';
 import '../widgets/cover_art_texture.dart';
 import '../widgets/fade_in_up_animation.dart';
-import '../widgets/equalizer_sheet.dart';
+import '../widgets/audio_effects_menu.dart';
 
 import '../services/responsive.dart';
 
@@ -232,12 +232,7 @@ class PlayerPage extends StatelessWidget {
   }
 
   void _showEqualizer(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const EqualizerSheet(),
-    );
+    showAudioEffectsMenu(context);
   }
 
 
