@@ -4,7 +4,6 @@ import '../models/playlist_model.dart';
 import '../services/music_service.dart';
 import '../models/music_model.dart';
 import '../models/cover_model.dart';
-import 'cover_art_texture.dart';
 
 class PlaylistCard extends StatelessWidget {
   final Playlist playlist;
@@ -22,6 +21,7 @@ class PlaylistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final musicService = Provider.of<MusicService>(context);
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
+    final coverList = musicService.getCoverListForPlaylist(playlist.id);
 
     return GestureDetector(
       onTap: onTap,
@@ -37,8 +37,8 @@ class PlaylistCard extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -49,9 +49,9 @@ class PlaylistCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _buildPlaylistCover(musicList),
+                _buildPlaylistCover(musicList, coverList),
                 
-                // Overlay Gradient
+                // Transparent gradient overlay with text
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -59,18 +59,18 @@ class PlaylistCard extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.8),
+                        Colors.black.withOpacity(0.7),
                       ],
-                      stops: const [0.6, 1.0],
+                      stops: const [0.5, 1.0],
                     ),
                   ),
                 ),
                 
-                // Playlist Info
+                // Playlist name text
                 Positioned(
-                  left: 10,
-                  right: 10,
-                  bottom: 10,
+                  left: 8,
+                  right: 8,
+                  bottom: 8,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -79,19 +79,33 @@ class PlaylistCard extends StatelessWidget {
                         playlist.name,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black54,
+                              blurRadius: 4,
+                            ),
+                          ],
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${musicList.length} tracks',
+                        '${musicList.length} song${musicList.length != 1 ? 's' : ''}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 10,
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 8,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black54,
+                              blurRadius: 4,
+                            ),
+                          ],
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -104,53 +118,13 @@ class PlaylistCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaylistCover(List<Music> musicList) {
+  Widget _buildPlaylistCover(List<Music> musicList, List<Cover> coverList) {
     if (musicList.isEmpty) {
       return _buildEmptyPlaylistCover();
-    }
-
-    // Centered Collage Logic
-    if (musicList.length == 1) {
-      // 1 TRACK: Clean Full Image
-      return CoverArtTexture(coverArtPath: musicList[0].coverPath);
-    } else if (musicList.length < 4) {
-      // 2 or 3 TRACKS: Symmetrical vertical split (Showing first 2)
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: CoverArtTexture(coverArtPath: musicList[0].coverPath)),
-          const VerticalDivider(width: 1, color: Colors.black26, thickness: 1),
-          Expanded(child: CoverArtTexture(coverArtPath: musicList[1].coverPath)),
-        ],
-      );
+    } else if (musicList.length == 1) {
+      return _buildSingleSongCover(coverList.first);
     } else {
-      // 4+ TRACKS: Balanced 2x2 Grid
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: CoverArtTexture(coverArtPath: musicList[0].coverPath)),
-                const VerticalDivider(width: 1, color: Colors.black26, thickness: 1),
-                Expanded(child: CoverArtTexture(coverArtPath: musicList[1].coverPath)),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: Colors.black26, thickness: 1),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: CoverArtTexture(coverArtPath: musicList[2].coverPath)),
-                const VerticalDivider(width: 1, color: Colors.black26, thickness: 1),
-                Expanded(child: CoverArtTexture(coverArtPath: musicList[3].coverPath)),
-              ],
-            ),
-          ),
-        ],
-      );
+      return _buildMultipleSongsCover(coverList);
     }
   }
 
@@ -161,39 +135,112 @@ class PlaylistCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            _getPlaylistColor(playlist.id).withOpacity(0.8),
+            Colors.purple.shade700,
+            Colors.purple.shade900,
             Colors.black,
           ],
         ),
       ),
-      child: Center(
+      child: const Center(
         child: Icon(
-          _getPlaylistIcon(playlist.id),
-          color: Colors.white38,
-          size: 40,
+          Icons.playlist_play,
+          color: Colors.white54,
+          size: 30,
         ),
       ),
     );
   }
 
-  IconData _getPlaylistIcon(String id) {
-    switch (id) {
-      case 'favorites': return Icons.favorite_rounded;
-      case 'most_listened': return Icons.trending_up_rounded;
-      case 'early_listened': return Icons.access_time_rounded;
-      case 'daily_mix': return Icons.auto_awesome_rounded;
-      default: return Icons.playlist_play_rounded;
+  Widget _buildSingleSongCover(Cover cover) {
+    if (cover.imageData != null) {
+      return Image.memory(
+        cover.imageData!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholderCover();
+        },
+      );
+    } else {
+      return _buildPlaceholderCover();
     }
   }
 
-  Color _getPlaylistColor(String id) {
-    switch (id) {
-      case 'favorites': return Colors.redAccent;
-      case 'most_listened': return Colors.purpleAccent;
-      case 'early_listened': return Colors.blueAccent;
-      case 'daily_mix': return Colors.tealAccent;
-      default: return Colors.grey;
-    }
+  Widget _buildMultipleSongsCover(List<Cover> coverList) {
+    // Take first 2 covers for the split cover effect
+    final firstCover = coverList.isNotEmpty ? coverList[0] : Cover();
+    final secondCover = coverList.length > 1 ? coverList[1] : Cover();
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.purple.shade700,
+            Colors.purple.shade900,
+            Colors.black,
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildCoverImage(firstCover, Alignment.topLeft),
+          ),
+          Expanded(
+            child: _buildCoverImage(secondCover, Alignment.bottomRight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCoverImage(Cover cover, Alignment alignment) {
+    return Container(
+      alignment: alignment,
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.black.withOpacity(0.3),
+            width: 2,
+          ),
+        ),
+        child: cover.imageData != null
+            ? Image.memory(
+                cover.imageData!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholderCover();
+                },
+              )
+            : _buildPlaceholderCover(),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderCover() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.teal.shade700,
+            Colors.teal.shade900,
+            Colors.black,
+          ],
+        ),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.music_note,
+          color: Colors.white54,
+          size: 20,
+        ),
+      ),
+    );
   }
 
   void _showContextMenuFromLongPress(BuildContext context) {
@@ -212,7 +259,9 @@ class PlaylistCard extends StatelessWidget {
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       color: Colors.grey[850],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       items: [
         PopupMenuItem<String>(
           value: 'play',

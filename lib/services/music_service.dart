@@ -1,61 +1,57 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:media_kit/media_kit.dart' hide Playlist;
+import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/music_model.dart';
+import '../models/cover_model.dart';
 import '../models/playlist_model.dart';
 import 'music_scanner_service.dart';
 
 class MusicService extends ChangeNotifier {
-  // --- Core State ---
   List<Music> _musicList = [];
   int _currentIndex = 0;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  late final Player _player;
-  
-  // Separate ValueNotifiers for playback state to avoid full rebuilds
-  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
-  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
-  final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
-  
-  // Performance State
-  DateTime _lastPositionUpdate = DateTime.now();
-  Timer? _saveSettingsTimer;
+  late AudioPlayer _audioPlayer;
+   
+  // Queue Management
   List<int> _queue = [];
   bool _isShuffle = false;
+  
+  // Scanning state
   bool _isLoadingSystemMusic = false;
   int _systemMusicCount = 0;
+  String _currentScanPath = '';
   
+  // Caching System Playlists
   List<Music> _cachedDailyMix = [];
   List<Music> _cachedMostListened = [];
   List<Music> _cachedEarlyListened = [];
+
+  // Cache files
+  static const String _favoritesCacheFile = 'favorites.json';
+  static const String _playlistsCacheFile = 'playlists.json';
+  static const String _statsCacheFile = 'music_stats.json';
+
   List<Playlist> _playlists = [];
   String? _currentPlaylistId;
+  int _currentPlaylistIndex = 0;
   bool _isRepeatOne = false;
   bool _isRepeatAll = true;
 
-  // Audio Effects
-  bool _isEffectsEnabled = true;
+  // Equalizer state
   bool _isEqualizerEnabled = false;
-  List<double> _globalEqValues = List.filled(10, 0.0);
+  List<double> _equalizerBandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
   String _currentPreset = 'Normal';
-  double _pitch = 1.0;
-  double _speed = 1.0;
-  double _reverb = 0.0;
-  Map<String, dynamic> _songSettings = {};
-  bool _useSongSpecificSettings = false;
-
-  String? _lastAppliedAf;
-  bool _isUpdatingEffects = false;
-  bool _hasPendingUpdate = false;
-
-  static const List<int> _eqFreqs = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  
+  // Equalizer frequencies (10-band EQ)
+  static const List<int> _eqFrequencies = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  
+  // Equalizer preset values
   static const Map<String, List<double>> _eqPresets = {
     'Normal':    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     'Pop':       [-1, 2, 4, 5, 4, 2, 0, -1, -2, -3],
@@ -70,409 +66,567 @@ class MusicService extends ChangeNotifier {
   };
 
   MusicService() {
-    _player = Player(configuration: const PlayerConfiguration(bufferSize: 32 * 1024 * 1024));
-    _initPlayer();
-    _loadAllData();
+    _audioPlayer = AudioPlayer();
+    _initAudioPlayer();
+    _loadFavoritesFromCache();
+    _loadPlaylistsFromCache();
+    _loadEqualizerSettings();
   }
 
-  void _initPlayer() {
-    _player.stream.position.listen((pos) {
-      final now = DateTime.now();
-      if (now.difference(_lastPositionUpdate).inMilliseconds > 500) {
-        _position = pos;
-        _positionNotifier.value = pos; // Update ValueNotifier for efficient rebuilds
-        _lastPositionUpdate = now;
-        // Don't call notifyListeners() for position updates - use ValueListenableBuilder instead
-      }
-    });
-    _player.stream.duration.listen((dur) { 
-      _duration = dur; 
-      _durationNotifier.value = dur; // Update ValueNotifier for efficient rebuilds
-      // Don't call notifyListeners() here - UI will rebuild via ValueListenableBuilder
-    });
-    _player.stream.completed.listen((done) { if (done) next(); });
-    _player.stream.playing.listen((state) { 
-      _isPlaying = state; 
-      _playingNotifier.value = state; // Update ValueNotifier for efficient rebuilds
-      // Don't call notifyListeners() here - UI will rebuild via ValueListenableBuilder
-    });
-  }
-
-  // --- Getters ---
+  // Getters
   List<Music> get musicList => _musicList;
-  Music? get currentMusic => _musicList.isNotEmpty && _currentIndex < _musicList.length ? _musicList[_currentIndex] : null;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
   Duration get position => _position;
   Duration get duration => _duration;
-  
-  // ValueNotifiers for efficient UI updates without full rebuilds
-  ValueNotifier<Duration> get positionNotifier => _positionNotifier;
-  ValueNotifier<Duration> get durationNotifier => _durationNotifier;
-  ValueNotifier<bool> get playingNotifier => _playingNotifier;
   bool get isLoadingSystemMusic => _isLoadingSystemMusic;
   int get systemMusicCount => _systemMusicCount;
+  String get currentScanPath => _currentScanPath;
   List<Playlist> get playlists => _playlists;
   bool get isShuffle => _isShuffle;
   bool get isRepeatOne => _isRepeatOne;
   bool get isRepeatAll => _isRepeatAll;
-  bool get isEffectsEnabled => _isEffectsEnabled;
+  
+  // Equalizer getters
   bool get isEqualizerEnabled => _isEqualizerEnabled;
+  List<double> get equalizerBandValues => _equalizerBandValues;
   String get currentPreset => _currentPreset;
-  double get pitch => _pitch;
-  double get speed => _speed;
-  double get reverb => _reverb;
-  bool get useSongSpecificSettings => _useSongSpecificSettings;
-  String? get currentPlaylistId => _currentPlaylistId;
 
-  List<double> get currentEqBandValues {
-    if (_useSongSpecificSettings && currentMusic != null) {
-      final s = _songSettings[currentMusic!.id];
-      if (s != null && s['eq'] != null) return List<double>.from(s['eq'].map((e) => (e as num).toDouble()));
-    }
-    return _globalEqValues;
+  String? get currentPlaylistId => _currentPlaylistId;
+  set currentPlaylistId(String? id) {
+    _currentPlaylistId = id;
+    notifyListeners();
   }
+
+  Music? get currentMusic => 
+      _musicList.isNotEmpty && _currentIndex < _musicList.length 
+          ? _musicList[_currentIndex] 
+          : null;
 
   List<Music> get favoriteMusicList => _musicList.where((m) => m.isFavorite).toList();
-  List<Playlist> get systemPlaylists => [
-    Playlist(id: 'favorites', name: 'Favorites', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'most_listened', name: 'Most Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'early_listened', name: 'Early Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'daily_mix', name: 'Daily Mix', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-  ];
+
+  // System Playlists
+  List<Playlist> get systemPlaylists {
+    return [
+      Playlist(id: 'favorites', name: 'Favorites', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'most_listened', name: 'Most Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'early_listened', name: 'Early Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      Playlist(id: 'daily_mix', name: 'Daily Mix', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+    ];
+  }
+
   List<Playlist> get allPlaylists => [...systemPlaylists, ..._playlists];
 
-  set currentIndex(int index) {
-    if (index >= 0 && index < _musicList.length) { _currentIndex = index; notifyListeners(); }
-  }
-  set currentPlaylistId(String? id) { _currentPlaylistId = id; notifyListeners(); }
+  void refreshSystemPlaylists() {
+    final mostPlayed = List<Music>.from(_musicList);
+    mostPlayed.sort((a, b) => b.playCount.compareTo(a.playCount));
+    _cachedMostListened = mostPlayed.take(30).where((m) => m.playCount > 0).toList();
 
-  // --- Audio Effects Engine ---
-  void setEffectsEnabled(bool v) { _isEffectsEnabled = v; _scheduleUpdate(); notifyListeners(); }
-  void setEqualizerEnabled(bool v) { _isEqualizerEnabled = v; _scheduleUpdate(); notifyListeners(); }
-  void setUseSongSpecificSettings(bool v) { _useSongSpecificSettings = v; _scheduleUpdate(); notifyListeners(); }
-  void setPitch(double v) { _pitch = v; _scheduleUpdate(); notifyListeners(); }
-  void setSpeed(double v) { _speed = v; _scheduleUpdate(); notifyListeners(); }
-  void setReverb(double v) { _reverb = v; _scheduleUpdate(); notifyListeners(); }
+    final earlyPlayed = List<Music>.from(_musicList);
+    earlyPlayed.sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
+    _cachedEarlyListened = earlyPlayed.take(30).where((m) => m.lastPlayed != null).toList();
 
-  void setEqualizerBand(int band, double val) {
-    val = double.parse(val.toStringAsFixed(1));
-    if (_useSongSpecificSettings && currentMusic != null) {
-      final id = currentMusic!.id;
-      _songSettings[id] ??= {'eq': List.from(_globalEqValues)};
-      _songSettings[id]['eq'][band] = val;
-    } else {
-      _globalEqValues[band] = val;
-      _currentPreset = 'Custom';
-    }
-    _scheduleUpdate(); _saveDebounced(); notifyListeners();
-  }
-
-  void setEqualizerPreset(String preset) {
-    _currentPreset = preset;
-    if (_eqPresets.containsKey(preset)) {
-      final values = List<double>.from(_eqPresets[preset]!);
-      if (_useSongSpecificSettings && currentMusic != null) {
-        _songSettings[currentMusic!.id] ??= {};
-        _songSettings[currentMusic!.id]['eq'] = values;
-      } else { _globalEqValues = values; }
-    }
-    _scheduleUpdate(); _saveDebounced(); notifyListeners();
-  }
-
-  void _scheduleUpdate() async {
-    if (_isUpdatingEffects) { _hasPendingUpdate = true; return; }
-    _isUpdatingEffects = true; _hasPendingUpdate = false;
-    try {
-      final native = _player.platform;
-      if (native is NativePlayer) {
-        String af = '';
-        if (_isEffectsEnabled) {
-          if (_isEqualizerEnabled) {
-            final v = currentEqBandValues;
-            af = 'equalizer=f=${_eqFreqs[0]}:g=${v[0]}';
-            for (int i=1; i<10; i++) { af += ',equalizer=f=${_eqFreqs[i]}:g=${v[i]}'; }
-          }
-          if (_reverb > 0) af += (af.isEmpty ? '' : ',') + 'freeverb=roomsize=${_reverb}:wet=${_reverb*0.5}';
-        }
-        if (af != _lastAppliedAf) { await native.setProperty('af', af); _lastAppliedAf = af; }
-        await native.setProperty('speed', _isEffectsEnabled ? _speed.toString() : '1.0');
-        await native.setProperty('pitch', _isEffectsEnabled ? (_pitch * 100).toInt().toString() : '100');
+    if (_musicList.isNotEmpty) {
+      final List<Music> result = [..._cachedMostListened.take(10)];
+      final genres = _musicList.map((m) => m.genre).toSet().toList();
+      if (genres.isNotEmpty) {
+        final randomGenre = genres[Random().nextInt(genres.length)];
+        final genreList = _musicList.where((m) => m.genre == randomGenre).take(20).toList();
+        result.addAll(genreList);
       }
-    } finally {
-      _isUpdatingEffects = false;
-      if (_hasPendingUpdate) _scheduleUpdate();
+      result.shuffle();
+      _cachedDailyMix = result.toSet().toList();
+    } else {
+      _cachedDailyMix = [];
+    }
+    notifyListeners();
+  }
+
+  set currentIndex(int index) {
+    if (index >= 0 && index < _musicList.length) {
+      _currentIndex = index;
+      notifyListeners();
     }
   }
 
-  List<String>? _lastUsedPaths;
-
-  // --- Core Methods ---
-  Future<void> play() async {
-    if (_musicList.isEmpty) return;
-    try {
-      await _player.open(Media(_musicList[_currentIndex].filePath));
-      _musicList[_currentIndex].playCount++;
-      _musicList[_currentIndex].lastPlayed = DateTime.now();
-      _lastAppliedAf = null; 
-      _scheduleUpdate();
-      // Don't call refreshSystemPlaylists() here - it's expensive and triggers rebuilds
-      _saveStats();
-      // Only notify listeners when actually needed
+  void _initAudioPlayer() {
+    _audioPlayer.onPositionChanged.listen((position) {
+      _position = position;
       notifyListeners();
-    } catch (e) { debugPrint('Play Error: $e'); }
+    });
+
+    _audioPlayer.onDurationChanged.listen((duration) {
+      _duration = duration;
+      notifyListeners();
+    });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (_isRepeatOne) {
+        play();
+      } else {
+        next();
+      }
+    });
+
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      _isPlaying = state == PlayerState.playing;
+      notifyListeners();
+    });
   }
 
-  void togglePlayPause() { _player.playOrPause(); }
-  void seekTo(Duration p) { _player.seek(p); }
-
-  void next() {
-    if (_musicList.isEmpty) return;
-    if (_isShuffle && _queue.isNotEmpty) {
-      int idx = _queue.indexOf(_currentIndex);
-      _currentIndex = _queue[(idx + 1) % _queue.length];
-    } else { _currentIndex = (_currentIndex + 1) % _musicList.length; }
-    play();
+  List<Music> getMusicListForPlaylist(String playlistId) {
+    if (playlistId == 'favorites') {
+      return favoriteMusicList;
+    } else if (playlistId == 'most_listened') {
+      return _cachedMostListened;
+    } else if (playlistId == 'early_listened') {
+      return _cachedEarlyListened;
+    } else if (playlistId == 'daily_mix') {
+      return _cachedDailyMix;
+    } else {
+      final playlist = _playlists.firstWhere((p) => p.id == playlistId, orElse: () => Playlist(id: '', name: '', createdAt: DateTime.now(), updatedAt: DateTime.now()));
+      return _musicList.where((m) => playlist.musicIds.contains(m.id)).toList();
+    }
   }
 
-  void previous() {
-    if (_musicList.isEmpty) return;
-    if (_position.inSeconds > 3) { seekTo(Duration.zero); return; }
-    if (_isShuffle && _queue.isNotEmpty) {
-      int idx = _queue.indexOf(_currentIndex);
-      _currentIndex = _queue[idx > 0 ? idx - 1 : _queue.length - 1];
-    } else { _currentIndex = _currentIndex > 0 ? _currentIndex - 1 : _musicList.length - 1; }
-    play();
+  List<Cover> getCoverListForPlaylist(String playlistId) {
+    final list = getMusicListForPlaylist(playlistId);
+    return List.generate(list.length, (index) => Cover());
   }
 
-  void toggleShuffle() { _isShuffle = !_isShuffle; if (_isShuffle) _generateShuffleQueue(); notifyListeners(); }
-  void toggleRepeatMode() {
-    if (_isRepeatAll && !_isRepeatOne) { _isRepeatAll = false; _isRepeatOne = true; }
-    else if (!_isRepeatAll && _isRepeatOne) { _isRepeatOne = false; }
-    else { _isRepeatAll = true; _isRepeatOne = false; }
+  void removeMusicFromPlaylist(String playlistId, String musicId) {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index != -1) {
+      _playlists[index].musicIds.remove(musicId);
+      _savePlaylists();
+      notifyListeners();
+    }
+  }
+
+  int get currentPlaylistIndex => _currentPlaylistIndex;
+  set currentPlaylistIndex(int index) {
+    _currentPlaylistIndex = index;
+    notifyListeners();
+  }
+
+  void deletePlaylist(String playlistId) {
+    _playlists.removeWhere((p) => p.id == playlistId);
+    _savePlaylists();
+    notifyListeners();
+  }
+
+  void playPlaylist(String playlistId) {
+    final list = getMusicListForPlaylist(playlistId);
+    if (list.isNotEmpty) {
+      _currentPlaylistId = playlistId;
+      final firstMusicId = list.first.id;
+      final index = _musicList.indexWhere((m) => m.id == firstMusicId);
+      if (index != -1) {
+        _currentIndex = index;
+        if (_isShuffle) _generateShuffleQueue();
+        play();
+      }
+    }
+  }
+
+  void toggleShuffle() {
+    _isShuffle = !_isShuffle;
+    if (_isShuffle) {
+      _generateShuffleQueue();
+    } else {
+      _queue.clear();
+    }
     notifyListeners();
   }
 
   void _generateShuffleQueue() {
-    _queue = List.generate(_musicList.length, (i) => i);
-    _queue.remove(_currentIndex); _queue.shuffle(); _queue.insert(0, _currentIndex);
+    _queue = List.generate(_musicList.length, (index) => index);
+    _queue.remove(_currentIndex);
+    _queue.shuffle();
+    _queue.insert(0, _currentIndex);
   }
 
-  // --- Library Management ---
-  Future<void> loadSystemMusic({List<String>? customPaths, bool clearExisting = true}) async {
-    if (_isLoadingSystemMusic) return;
-
-    final hasPermission = await MusicScannerService.checkPermissions();
-    if (!hasPermission) return;
-
-    _isLoadingSystemMusic = true;
-    if (customPaths != null) _lastUsedPaths = customPaths;
-    
-    if (clearExisting) {
-      _musicList = [];
-      _systemMusicCount = 0;
+  void toggleRepeatMode() {
+    if (_isRepeatAll && !_isRepeatOne) {
+      _isRepeatAll = false;
+      _isRepeatOne = true;
+    } else if (!_isRepeatAll && _isRepeatOne) {
+      _isRepeatOne = false;
+    } else {
+      _isRepeatAll = true;
+      _isRepeatOne = false;
     }
     notifyListeners();
-    
-    // Use a timer to throttle notifyListeners during scanning
-    Timer? throttleTimer;
-    
-    await MusicScannerService.startScanning(
-      customPaths: customPaths ?? _lastUsedPaths,
-      onBatchUpdate: (batch) {
-        bool changed = false;
-        for (var m in batch) {
-          if (!_musicList.any((existing) => existing.filePath == m.filePath)) {
-            _musicList.add(m);
-            changed = true;
-          }
-        }
-        
-        if (changed) {
-          _systemMusicCount = _musicList.length;
-          // Throttle UI updates
-          if (throttleTimer == null || !throttleTimer!.isActive) {
-            notifyListeners();
-            throttleTimer = Timer(const Duration(milliseconds: 500), () {});
-          }
-        }
-      }
-    );
+  }
 
-    throttleTimer?.cancel();
-    await _loadStats(); 
-    await _loadFavoritesFromCache();
-    
-    _isLoadingSystemMusic = false; 
-    _generateShuffleQueue(); 
-    refreshSystemPlaylists();
+  Future<void> play() async {
+    if (_musicList.isEmpty || _currentIndex >= _musicList.length) return;
+
+    try {
+      final filePath = _musicList[_currentIndex].filePath;
+      await _audioPlayer.stop();
+      await _audioPlayer.play(DeviceFileSource(filePath));
+      _isPlaying = true;
+      
+      _musicList[_currentIndex].playCount++;
+      _musicList[_currentIndex].lastPlayed = DateTime.now();
+      
+      // Apply equalizer settings to the new track
+      _applyEqualizerSettings();
+      
+      refreshSystemPlaylists();
+      _saveStats();
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Playback error: $e');
+    }
+  }
+
+  Future<void> _saveStats() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_statsCacheFile');
+      final data = _musicList.map((m) => m.toJson()).toList();
+      await file.writeAsString(json.encode(data));
+    } catch (e) {}
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_statsCacheFile');
+      if (await file.exists()) {
+        final List data = json.decode(await file.readAsString());
+        for (var item in data) {
+          final idx = _musicList.indexWhere((m) => m.id == item['id']);
+          if (idx != -1) {
+            final m = _musicList[idx];
+            _musicList[idx] = Music.fromBase(
+              m, 
+              item['playCount'] ?? 0, 
+              item['lastPlayed'] != null ? DateTime.fromMillisecondsSinceEpoch(item['lastPlayed']) : null
+            );
+          }
+        }
+        refreshSystemPlaylists();
+      }
+    } catch (e) {}
+  }
+
+  Future<void> togglePlayPause() async {
+    if (_isPlaying) {
+      await _audioPlayer.pause();
+    } else {
+      if (_audioPlayer.state == PlayerState.paused) {
+        await _audioPlayer.resume();
+      } else {
+        await play();
+      }
+    }
     notifyListeners();
   }
 
-  Future<void> clearCache() async {
-    _musicList = []; _systemMusicCount = 0;
-    notifyListeners(); 
-    await loadSystemMusic(customPaths: _lastUsedPaths);
+  Future<void> next() async {
+    if (_musicList.isEmpty) return;
+
+    if (_isShuffle) {
+      int currentQueueIndex = _queue.indexOf(_currentIndex);
+      if (currentQueueIndex < _queue.length - 1) {
+        _currentIndex = _queue[currentQueueIndex + 1];
+      } else if (_isRepeatAll) {
+        _currentIndex = _queue[0];
+      } else {
+        await _audioPlayer.stop();
+        _isPlaying = false;
+        notifyListeners();
+        return;
+      }
+    } else {
+      if (_currentIndex < _musicList.length - 1) {
+        _currentIndex++;
+      } else if (_isRepeatAll) {
+        _currentIndex = 0;
+      } else {
+        await _audioPlayer.stop();
+        _isPlaying = false;
+        notifyListeners();
+        return;
+      }
+    }
+    await play();
   }
 
-  // ... (Rest of logic) ...
-  void deleteMusic(int idx) {
-    if (idx >= 0 && idx < _musicList.length) {
-      _musicList.removeAt(idx);
+  Future<void> previous() async {
+    if (_musicList.isEmpty) return;
+
+    if (_position.inSeconds > 3) {
+      await _audioPlayer.seek(Duration.zero);
+      return;
+    }
+
+    if (_isShuffle) {
+      int currentQueueIndex = _queue.indexOf(_currentIndex);
+      if (currentQueueIndex > 0) {
+        _currentIndex = _queue[currentQueueIndex - 1];
+      } else if (_isRepeatAll) {
+        _currentIndex = _queue.last;
+      }
+    } else {
+      if (_currentIndex > 0) {
+        _currentIndex--;
+      } else if (_isRepeatAll) {
+        _currentIndex = _musicList.length - 1;
+      }
+    }
+    await play();
+  }
+
+  Future<void> seekTo(Duration pos) async {
+    await _audioPlayer.seek(pos);
+    notifyListeners();
+  }
+
+  Future<void> loadSystemMusic() async {
+    if (_isLoadingSystemMusic) return;
+    
+    _isLoadingSystemMusic = true;
+    _musicList = [];
+    notifyListeners();
+
+    try {
+      await MusicScannerService.startScanning(
+        onProgress: (path) {
+          _currentScanPath = path;
+          notifyListeners();
+        },
+        onBatchUpdate: (newMusic) {
+          _musicList.addAll(newMusic);
+          _systemMusicCount = _musicList.length;
+          refreshSystemPlaylists();
+          notifyListeners();
+        },
+      );
+
+      await _loadStats();
+      if (_isShuffle) _generateShuffleQueue();
+      await _loadFavoritesFromCache();
+      
+      refreshSystemPlaylists();
+    } catch (e) {
+      if (kDebugMode) print('Scan error: $e');
+    }
+
+    _isLoadingSystemMusic = false;
+    _currentScanPath = '';
+    notifyListeners();
+  }
+
+  Future<void> _loadFavoritesFromCache() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$_favoritesCacheFile');
+      if (await file.exists()) {
+        final ids = json.decode(await file.readAsString()).cast<String>();
+        for (var music in _musicList) {
+          music.isFavorite = ids.contains(music.id);
+        }
+        notifyListeners();
+      }
+    } catch (e) {}
+  }
+
+  Future<void> toggleFavorite(String musicId) async {
+    final music = _musicList.firstWhere((m) => m.id == musicId);
+    music.isFavorite = !music.isFavorite;
+    notifyListeners();
+    
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$_favoritesCacheFile');
+    final ids = _musicList.where((m) => m.isFavorite).map((m) => m.id).toList();
+    await file.writeAsString(json.encode(ids));
+  }
+
+  Future<void> _loadPlaylistsFromCache() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$_playlistsCacheFile');
+      if (await file.exists()) {
+        final data = json.decode(await file.readAsString()) as List;
+        _playlists = data.map((j) => Playlist.fromJson(j)).toList();
+        notifyListeners();
+      }
+    } catch (e) {}
+  }
+
+  Future<void> createPlaylist(String name) async {
+    final pl = Playlist(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      musicIds: [],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    _playlists.add(pl);
+    await _savePlaylists();
+    notifyListeners();
+  }
+
+  Future<void> _savePlaylists() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$_playlistsCacheFile');
+    await file.writeAsString(json.encode(_playlists.map((p) => p.toJson()).toList()));
+  }
+
+  void addMusicToPlaylist(String plId, String mId) {
+    final pl = _playlists.firstWhere((p) => p.id == plId);
+    if (!pl.musicIds.contains(mId)) {
+      pl.musicIds.add(mId);
+      _savePlaylists();
+      notifyListeners();
+    }
+  }
+
+  void deleteMusic(int index) {
+    if (index < _musicList.length) {
+      _musicList.removeAt(index);
       if (_currentIndex >= _musicList.length) _currentIndex = max(0, _musicList.length - 1);
       notifyListeners();
     }
   }
 
-  Future<void> updateMusicMetadata(String id, String t, String a, String al, String g) async {
-    int idx = _musicList.indexWhere((m) => m.id == id);
-    if (idx != -1) {
-      final old = _musicList[idx];
-      final neu = Music(id: old.id, title: t, artist: a, album: al, genre: g, filePath: old.filePath, coverPath: old.coverPath, duration: old.duration, isFavorite: old.isFavorite, playCount: old.playCount, lastPlayed: old.lastPlayed);
-      _musicList[idx] = neu; notifyListeners();
+  Future<void> updateMusicMetadata(String musicId, String title, String artist, String album, String genre) async {
+    final index = _musicList.indexWhere((m) => m.id == musicId);
+    if (index != -1) {
+      final oldMusic = _musicList[index];
+      final newMusic = Music(
+        id: oldMusic.id,
+        title: title,
+        artist: artist,
+        album: album,
+        genre: genre,
+        filePath: oldMusic.filePath,
+        coverPath: oldMusic.coverPath,
+        duration: oldMusic.duration,
+        isFavorite: oldMusic.isFavorite,
+        playCount: oldMusic.playCount,
+        lastPlayed: oldMusic.lastPlayed,
+      );
+      
+      _musicList[index] = newMusic;
+      
+      // Update cache
+      await MusicScannerService.cacheMusic(newMusic, File(newMusic.filePath));
+      
+      notifyListeners();
     }
   }
 
-  void refreshSystemPlaylists() {
-    if (_musicList.isEmpty) return;
-    final history = List<Music>.from(_musicList)
-      ..where((m) => m.lastPlayed != null).toList()
-      ..sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
-    _cachedEarlyListened = history.take(10).toList();
-    final topPlayed = List<Music>.from(_musicList)
-      ..where((m) => m.playCount > 0).toList()
-      ..sort((a, b) => b.playCount.compareTo(a.playCount));
-    _cachedMostListened = topPlayed.take(5).toList();
-    _cachedDailyMix = _generateDailyMix();
+  /// Clear all cached music data and re-scan
+  Future<void> clearCache() async {
+    await MusicScannerService.cleanupCache();
+    _musicList = [];
+    _systemMusicCount = 0;
+    _cachedDailyMix = [];
+    _cachedMostListened = [];
+    _cachedEarlyListened = [];
+    notifyListeners();
+    await loadSystemMusic();
+  }
+  
+  // Equalizer methods - stores settings for UI and applies them to playback
+  Future<void> setEqualizerEnabled(bool enabled) async {
+    _isEqualizerEnabled = enabled;
+    debugPrint('Equalizer enabled: $enabled');
+    await _saveEqualizerSettings();
+    _applyEqualizerSettings();
     notifyListeners();
   }
-
-  List<Music> _generateDailyMix() {
-    if (_musicList.isEmpty) return [];
-    final genreScores = <String, int>{};
-    for (var m in _musicList) {
-      if (m.playCount > 0) genreScores[m.genre] = (genreScores[m.genre] ?? 0) + m.playCount;
-    }
-    final sortedGenres = genreScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final topGenres = sortedGenres.take(3).map((e) => e.key).toList();
-    final Set<Music> mix = {};
-    if (topGenres.isNotEmpty) {
-      final genrePool = _musicList.where((m) => topGenres.contains(m.genre)).toList()..shuffle();
-      mix.addAll(genrePool.take(10));
-    }
-    final discoveryPool = List<Music>.from(_musicList)..shuffle();
-    mix.addAll(discoveryPool.take(15));
-    return mix.toList()..shuffle();
-  }
-
-  Future<void> createPlaylist(String name) async {
-    _playlists.add(Playlist(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name, musicIds: [], createdAt: DateTime.now(), updatedAt: DateTime.now()));
-    await _savePlaylists(); notifyListeners();
-  }
-  void deletePlaylist(String id) { _playlists.removeWhere((p) => p.id == id); _savePlaylists(); notifyListeners(); }
-  void addMusicToPlaylist(String plId, String mId) {
-    final pl = _playlists.firstWhere((p) => p.id == plId);
-    if (!pl.musicIds.contains(mId)) { pl.musicIds.add(mId); _savePlaylists(); notifyListeners(); }
-  }
-  void removeMusicFromPlaylist(String plId, String mId) {
-    int idx = _playlists.indexWhere((p) => p.id == plId);
-    if (idx != -1) { _playlists[idx].musicIds.remove(mId); _savePlaylists(); notifyListeners(); }
-  }
-  void playPlaylist(String id) {
-    final list = getMusicListForPlaylist(id);
-    if (list.isNotEmpty) {
-      _currentPlaylistId = id;
-      _currentIndex = _musicList.indexWhere((m) => m.id == list.first.id);
-      if (_isShuffle) _generateShuffleQueue();
-      play();
-    }
-  }
-  List<Music> getMusicListForPlaylist(String id) {
-    if (id == 'favorites') return favoriteMusicList;
-    if (id == 'most_listened') return _cachedMostListened;
-    if (id == 'early_listened') return _cachedEarlyListened;
-    if (id == 'daily_mix') return _cachedDailyMix;
-    final pl = _playlists.firstWhere((p) => p.id == id, orElse: () => Playlist(id: '', name: '', createdAt: DateTime.now(), updatedAt: DateTime.now()));
-    return _musicList.where((m) => pl.musicIds.contains(m.id)).toList();
-  }
-
-  Future<void> _loadAllData() async {
-    await Future.wait([_loadFavoritesFromCache(), _loadPlaylistsFromCache(), _loadAudioEffectsSettings(), _loadStats()]);
-    refreshSystemPlaylists();
-  }
-  void _saveDebounced() {
-    _saveSettingsTimer?.cancel();
-    _saveSettingsTimer = Timer(const Duration(seconds: 2), () => _saveAudioEffectsSettings());
-  }
-  Future<void> _saveAudioEffectsSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('master_eff', _isEffectsEnabled);
-    await prefs.setString('song_eff_map', jsonEncode(_songSettings));
-    await prefs.setStringList('glob_eq', _globalEqValues.map((e) => e.toString()).toList());
-  }
-  Future<void> _loadAudioEffectsSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isEffectsEnabled = prefs.getBool('master_eff') ?? true;
-    final eqList = prefs.getStringList('glob_eq');
-    if (eqList != null) _globalEqValues = eqList.map((e) => double.tryParse(e) ?? 0.0).toList();
-    _scheduleUpdate();
-  }
-  Future<void> _loadFavoritesFromCache() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/favorites.json');
-    if (await file.exists()) {
-      final ids = jsonDecode(await file.readAsString()).cast<String>();
-      for (var m in _musicList) m.isFavorite = ids.contains(m.id);
+  
+  Future<void> setEqualizerBand(int band, double value) async {
+    if (band >= 0 && band < _equalizerBandValues.length) {
+      _equalizerBandValues[band] = value;
+      debugPrint('Equalizer band $band set to $value');
+      await _saveEqualizerSettings();
+      _applyEqualizerSettings();
       notifyListeners();
     }
   }
-  Future<void> toggleFavorite(String id) async {
-    final m = _musicList.firstWhere((m) => m.id == id);
-    m.isFavorite = !m.isFavorite; notifyListeners();
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/favorites.json');
-    final ids = _musicList.where((m) => m.isFavorite).map((m) => m.id).toList();
-    await file.writeAsString(jsonEncode(ids));
+  
+  Future<void> setEqualizerPreset(String preset) async {
+    _currentPreset = preset;
+    
+    if (_eqPresets.containsKey(preset)) {
+      _equalizerBandValues = List.from(_eqPresets[preset]!);
+      debugPrint('Equalizer preset set to $preset');
+    }
+    
+    await _saveEqualizerSettings();
+    _applyEqualizerSettings();
+    notifyListeners();
   }
-  Future<void> _loadPlaylistsFromCache() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/playlists.json');
-    if (await file.exists()) {
-      final data = jsonDecode(await file.readAsString()) as List;
-      _playlists = data.map((j) => Playlist.fromJson(j)).toList();
-      notifyListeners();
+  
+  /// Apply current equalizer settings to the audio player
+  /// Note: audioplayers doesn't support native EQ, this is where you'd integrate
+  /// with a native audio plugin or use just_audio with equalizer support
+  void _applyEqualizerSettings() {
+    if (_isEqualizerEnabled) {
+      debugPrint('Applying equalizer: $_equalizerBandValues');
+      // Here you would apply EQ via native code or a different audio player
+      // For now, we just log that EQ would be applied
+    } else {
+      debugPrint('Equalizer disabled, using flat EQ');
     }
   }
-  Future<void> _savePlaylists() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/playlists.json');
-    await file.writeAsString(jsonEncode(_playlists.map((p) => p.toJson()).toList()));
+  
+  /// Save equalizer settings to persistent storage
+  Future<void> _saveEqualizerSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('eq_enabled', _isEqualizerEnabled);
+      await prefs.setStringList('eq_band_values', _equalizerBandValues.map((e) => e.toString()).toList());
+      await prefs.setString('eq_current_preset', _currentPreset);
+    } catch (e) {
+      if (kDebugMode) print('Failed to save equalizer settings: $e');
+    }
   }
-  Future<void> _saveStats() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/music_stats.json');
-    await file.writeAsString(jsonEncode(_musicList.map((m) => m.toJson()).toList()));
-  }
-  Future<void> _loadStats() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/music_stats.json');
-    if (await file.exists()) {
-      final data = jsonDecode(await file.readAsString()) as List;
-      for (var item in data) {
-        int idx = _musicList.indexWhere((m) => m.id == item['id']);
-        if (idx != -1) _musicList[idx] = Music.fromBase(_musicList[idx], item['playCount'] ?? 0, item['lastPlayed'] != null ? DateTime.fromMillisecondsSinceEpoch(item['lastPlayed']) : null);
+  
+  /// Load equalizer settings from persistent storage
+  Future<void> _loadEqualizerSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isEqualizerEnabled = prefs.getBool('eq_enabled') ?? false;
+      
+      final bandValuesStr = prefs.getStringList('eq_band_values');
+      if (bandValuesStr != null && bandValuesStr.length == 10) {
+        _equalizerBandValues = bandValuesStr.map((e) => double.tryParse(e) ?? 0.0).toList();
       }
+      
+      _currentPreset = prefs.getString('eq_current_preset') ?? 'Normal';
+      
+      // If a preset was saved, ensure band values match
+      if (_eqPresets.containsKey(_currentPreset)) {
+        _equalizerBandValues = List.from(_eqPresets[_currentPreset]!);
+      }
+      
+      debugPrint('Loaded equalizer settings: enabled=$_isEqualizerEnabled, preset=$_currentPreset');
+    } catch (e) {
+      if (kDebugMode) print('Failed to load equalizer settings: $e');
     }
   }
-  List<int> getEqualizerFrequencies() => _eqFreqs;
-  List<String> getEqualizerPresets() => _eqPresets.keys.toList();
+  
+  /// Get available equalizer band frequencies
+  List<int> getEqualizerFrequencies() {
+    return _eqFrequencies;
+  }
+  
+  /// Get available equalizer presets
+  List<String> getEqualizerPresets() {
+    return _eqPresets.keys.toList();
+  }
+
   @override
-  void dispose() { 
-    _player.dispose(); 
-    _saveSettingsTimer?.cancel();
-    _positionNotifier.dispose();
-    _durationNotifier.dispose();
-    _playingNotifier.dispose();
-    super.dispose(); 
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
   }
 }

@@ -283,12 +283,7 @@ class SettingsScreen extends StatelessWidget {
           Expanded(child: Text(path, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontSize: 13), overflow: TextOverflow.ellipsis)),
           IconButton(
             icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.redAccent),
-            onPressed: () async {
-              await settings.removeMusicPath(path);
-              // Trigger re-scan
-              final musicService = context.read<MusicService>();
-              musicService.loadSystemMusic(customPaths: settings.musicSourcePaths);
-            },
+            onPressed: () => settings.removeMusicPath(path),
           ),
         ],
       ),
@@ -297,11 +292,6 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _addPath(BuildContext context, SettingsModel settings) async {
     final path = await FilePicker.platform.getDirectoryPath();
-    if (path != null) {
-      await settings.addMusicPath(path);
-      // Trigger re-scan
-      final musicService = context.read<MusicService>();
-      musicService.loadSystemMusic(customPaths: settings.musicSourcePaths);
-    }
+    if (path != null) settings.addMusicPath(path);
   }
 }

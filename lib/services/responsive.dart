@@ -54,9 +54,7 @@ class Responsive {
   /// Returns a percentage of screen height
   static double hp(double percent) => screenHeight * (percent / 100);
 
-  static bool get isMobile => screenWidth <= 600;
-  static bool get isTablet => screenWidth > 600 && screenWidth <= 1200;
-  static bool get isDesktop => screenWidth > 1200;
+  static bool get isTablet => screenWidth > 600;
   static bool get isLandscape => _mediaQueryData.orientation == Orientation.landscape;
 }
 

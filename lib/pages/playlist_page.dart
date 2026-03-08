@@ -22,10 +22,10 @@ class PlaylistPage extends StatelessWidget {
         if (searchQuery.isNotEmpty) {
           allPlaylists = allPlaylists.where((playlist) {
             // Check if playlist name matches search query
-            final playlistNameMatch = (playlist as Playlist).name.toLowerCase().contains(searchQuery.toLowerCase());
+            final playlistNameMatch = playlist.name.toLowerCase().contains(searchQuery.toLowerCase());
             
             // Check if any song in the playlist matches search query
-            final musicList = musicService.getMusicListForPlaylist((playlist as Playlist).id);
+            final musicList = musicService.getMusicListForPlaylist(playlist.id);
             final hasMatchingSongs = musicList.any((music) {
               return music.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
                      music.artist.toLowerCase().contains(searchQuery.toLowerCase());

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/music_service.dart';
 import '../models/music_model.dart';
+import '../models/cover_model.dart';
 import '../widgets/cover_art_texture.dart';
-import '../widgets/audio_effects_menu.dart';
+import '../widgets/fade_in_up_animation.dart';
+import '../widgets/equalizer_sheet.dart';
 
 import '../services/responsive.dart';
 
@@ -73,9 +75,6 @@ class PlayerPage extends StatelessWidget {
   }
 
   Widget _buildCoverSection(Music? music, double size, ThemeData theme) {
-    // Use a unique key based on music ID to prevent unnecessary rebuilds
-    final coverKey = ValueKey('cover_${music?.id ?? 'empty'}');
-    
     return Center(
       child: Container(
         width: size,
@@ -91,9 +90,7 @@ class PlayerPage extends StatelessWidget {
           ],
         ),
         child: CoverArtTexture(
-          key: coverKey,
           coverArtPath: music?.coverPath ?? '',
-          musicId: music?.id,
           width: size,
           height: size,
           borderRadius: BorderRadius.circular(30.s),
@@ -124,95 +121,81 @@ class PlayerPage extends StatelessWidget {
   }
 
   Widget _buildProgressSlider(MusicService musicService, ThemeData theme) {
-    // Use ValueListenableBuilder for efficient position updates without rebuilding entire page
-    return ValueListenableBuilder<Duration>(
-      valueListenable: musicService.positionNotifier,
-      builder: (context, pos, child) {
-        return ValueListenableBuilder<Duration>(
-          valueListenable: musicService.durationNotifier,
-          builder: (context, dur, child) {
-            return Column(
-              children: [
-                SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 4.h,
-                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.s),
-                    overlayShape: RoundSliderOverlayShape(overlayRadius: 14.s),
-                    activeTrackColor: Colors.teal,
-                    inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
-                    thumbColor: theme.colorScheme.onSurface,
-                  ),
-                  child: Slider(
-                    value: pos.inSeconds.toDouble().clamp(0, dur.inSeconds.toDouble() + 1),
-                    max: dur.inSeconds > 0 ? dur.inSeconds.toDouble() : 1,
-                    onChanged: (v) => musicService.seekTo(Duration(seconds: v.toInt())),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_formatDuration(pos), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
-                      Text(_formatDuration(dur), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final pos = musicService.position;
+    final dur = musicService.duration;
+    
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 4.h,
+            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.s),
+            overlayShape: RoundSliderOverlayShape(overlayRadius: 14.s),
+            activeTrackColor: Colors.teal,
+            inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
+            thumbColor: theme.colorScheme.onSurface,
+          ),
+          child: Slider(
+            value: pos.inSeconds.toDouble().clamp(0, dur.inSeconds.toDouble() + 1),
+            max: dur.inSeconds > 0 ? dur.inSeconds.toDouble() : 1,
+            onChanged: (v) => musicService.seekTo(Duration(seconds: v.toInt())),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_formatDuration(pos), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
+              Text(_formatDuration(dur), style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12.sp)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildPlaybackControls(MusicService musicService, ThemeData theme) {
-    // Use ValueListenableBuilder for efficient playing state updates
-    return ValueListenableBuilder<bool>(
-      valueListenable: musicService.playingNotifier,
-      builder: (context, isPlaying, child) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              iconSize: 24.s,
-              icon: Icon(
-                Icons.shuffle_rounded,
-                color: musicService.isShuffle ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-              onPressed: musicService.toggleShuffle,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        IconButton(
+          iconSize: 24.s,
+          icon: Icon(
+            Icons.shuffle_rounded,
+            color: musicService.isShuffle ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
+          onPressed: musicService.toggleShuffle,
+        ),
+        IconButton(
+          icon: Icon(Icons.skip_previous_rounded, size: 40.s, color: theme.colorScheme.onSurface),
+          onPressed: musicService.previous,
+        ),
+        GestureDetector(
+          onTap: musicService.togglePlayPause,
+          child: Container(
+            padding: EdgeInsets.all(16.s),
+            decoration: const BoxDecoration(color: Colors.teal, shape: BoxShape.circle),
+            child: Icon(
+              musicService.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              size: 40.s,
+              color: Colors.white,
             ),
-            IconButton(
-              icon: Icon(Icons.skip_previous_rounded, size: 40.s, color: theme.colorScheme.onSurface),
-              onPressed: musicService.previous,
-            ),
-            GestureDetector(
-              onTap: musicService.togglePlayPause,
-              child: Container(
-                padding: EdgeInsets.all(16.s),
-                decoration: const BoxDecoration(color: Colors.teal, shape: BoxShape.circle),
-                child: Icon(
-                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 40.s,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: Icon(Icons.skip_next_rounded, size: 40.s, color: theme.colorScheme.onSurface),
-              onPressed: musicService.next,
-            ),
-            IconButton(
-              iconSize: 24.s,
-              icon: Icon(
-                musicService.isRepeatOne ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                color: (musicService.isRepeatOne || musicService.isRepeatAll) ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-              onPressed: musicService.toggleRepeatMode,
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+        IconButton(
+          icon: Icon(Icons.skip_next_rounded, size: 40.s, color: theme.colorScheme.onSurface),
+          onPressed: musicService.next,
+        ),
+        IconButton(
+          iconSize: 24.s,
+          icon: Icon(
+            musicService.isRepeatOne ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+            color: (musicService.isRepeatOne || musicService.isRepeatAll) ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
+          onPressed: musicService.toggleRepeatMode,
+        ),
+      ],
     );
   }
 
@@ -235,9 +218,9 @@ class PlayerPage extends StatelessWidget {
           onPressed: () {},
         ),
         IconButton(
-          icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
+          icon: Icon(Icons.equalizer_rounded, color: theme.colorScheme.onSurface.withOpacity(0.6), size: 24.s),
           onPressed: () {
-            _showAudioEffects(context);
+            _showEqualizer(context);
           },
         ),
         IconButton(
@@ -248,11 +231,12 @@ class PlayerPage extends StatelessWidget {
     );
   }
 
-  void _showAudioEffects(BuildContext context) {
-    showDialog(
+  void _showEqualizer(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder: (context) => const AudioEffectsMenu(),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const EqualizerSheet(),
     );
   }
 
