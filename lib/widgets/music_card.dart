@@ -35,66 +35,76 @@ class MusicCard extends StatelessWidget {
 
   Widget _buildListView(BuildContext context, SettingsModel settings) {
     final musicService = Provider.of<MusicService>(context, listen: false);
+    // Calculate adaptive height based on settings.cardSize
+    // Base height is 60, scaled by the ratio of cardSize to default 140
+    final double scale = settings.cardSize / 140.0;
+    final double leadingSize = (44 * scale).clamp(32.0, 80.0).s;
+    final double tileHeight = (64 * scale).clamp(48.0, 100.0).h;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapDown: (details) => _showGlassContextMenu(context, details.globalPosition),
       onLongPress: () => _showGlassContextMenuFromLongPress(context),
       child: GlassContainer(
-        margin: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+        margin: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
         color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular((settings.borderRadius + 6).s),
+        borderRadius: BorderRadius.circular((settings.borderRadius + 4).s),
         blur: 10.0,
-        child: ListTile(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular((settings.borderRadius + 6).s),
-          ),
-          contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(settings.borderRadius.s / 2.4),
-            child: Hero(
-              tag: '${heroPrefix ?? 'music-art'}-${music.id}',
-              child: SizedBox(
-                width: 44.s,
-                height: 44.s,
-                child: CoverArtTexture(
-                  coverArtPath: music.coverPath,
-                  width: 44.s,
-                  height: 44.s,
+        child: Container(
+          height: tileHeight,
+          alignment: Alignment.center,
+          child: ListTile(
+            visualDensity: VisualDensity.compact,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular((settings.borderRadius + 4).s),
+            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12.w),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(settings.borderRadius.s / 2.5),
+              child: Hero(
+                tag: '${heroPrefix ?? 'music-art'}-${music.id}',
+                child: SizedBox(
+                  width: leadingSize,
+                  height: leadingSize,
+                  child: CoverArtTexture(
+                    coverArtPath: music.coverPath,
+                    width: leadingSize,
+                    height: leadingSize,
+                  ),
                 ),
               ),
             ),
-          ),
-          title: Text(
-            music.title,
-            style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            music.artist,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10.sp),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(
-                  music.isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: music.isFavorite ? Colors.red : Colors.white54,
-                  size: 20.s,
+            title: Text(
+              music.title,
+              style: TextStyle(color: Colors.white, fontSize: (12 * scale).clamp(10.0, 16.0).sp, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              music.artist,
+              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: (10 * scale).clamp(8.0, 14.0).sp),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    music.isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: music.isFavorite ? settings.accentColor : Colors.white54,
+                    size: (20 * scale).clamp(16.0, 24.0).s,
+                  ),
+                  onPressed: () => musicService.toggleFavorite(music.id),
                 ),
-                onPressed: () => musicService.toggleFavorite(music.id),
-              ),
-              IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.white54),
-                onPressed: () => _showGlassContextMenuFromLongPress(context),
-              ),
-            ],
+                IconButton(
+                  icon: Icon(Icons.more_vert, color: Colors.white54, size: (20 * scale).clamp(16.0, 24.0).s),
+                  onPressed: () => _showGlassContextMenuFromLongPress(context),
+                ),
+              ],
+            ),
+            onTap: onTap,
           ),
-          onTap: onTap,
         ),
       ),
     );
@@ -155,7 +165,7 @@ class MusicCard extends StatelessWidget {
                       blur: 8.0,
                       child: Icon(
                         music.isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: music.isFavorite ? Colors.red : Colors.white,
+                        color: music.isFavorite ? settings.accentColor : Colors.white,
                         size: 14.s,
                       ),
                     ),

@@ -660,6 +660,21 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> renamePlaylist(String id, String newName) async {
+    final index = _playlists.indexWhere((pl) => pl.id == id);
+    if (index != -1) {
+      _playlists[index] = Playlist(
+        id: _playlists[index].id,
+        name: newName,
+        musicIds: _playlists[index].musicIds,
+        createdAt: _playlists[index].createdAt,
+        updatedAt: DateTime.now(),
+      );
+      await _savePlaylists();
+      notifyListeners();
+    }
+  }
+
   void deletePlaylist(String id) {
     _playlists.removeWhere((playlist) => playlist.id == id);
     _savePlaylists();
