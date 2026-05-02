@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum ViewMode { card, list }
 enum NavPosition { top, bottom, left, right }
+enum ThemePreset { classic, fox, anime, azure, cosmic, sunset, midnight }
+enum ParticleEffect { none, sakura, snow, stars, bubbles, rain }
 
 class SettingsModel extends ChangeNotifier {
   static const String _musicPathsKey = 'music_source_paths';
@@ -18,6 +20,8 @@ class SettingsModel extends ChangeNotifier {
   static const String _accentColorKey = 'accent_color';
   static const String _seekStepSecondsKey = 'seek_step_seconds';
   static const String _navPositionKey = 'nav_position';
+  static const String _themePresetKey = 'theme_preset';
+  static const String _particleEffectKey = 'particle_effect';
 
   List<String> musicSourcePaths = [];
   double cardSize = 140.0;
@@ -28,6 +32,8 @@ class SettingsModel extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.dark;
   ViewMode viewMode = ViewMode.card;
   NavPosition navPosition = NavPosition.bottom;
+  ThemePreset themePreset = ThemePreset.classic;
+  ParticleEffect particleEffect = ParticleEffect.none;
   double fontSize = 14.0;
   double borderRadius = 12.0;
   Color accentColor = Colors.teal;
@@ -47,8 +53,8 @@ class SettingsModel extends ChangeNotifier {
       cardCount = prefs.getInt(_cardCountKey) ?? 3;
       useAutoCardCount = prefs.getBool(_useAutoCardCountKey) ?? true;
       
-      final themeIndex = prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
-      themeMode = ThemeMode.values[themeIndex];
+      final themeModeIndex = prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
+      themeMode = ThemeMode.values[themeModeIndex];
 
       final viewModeIndex = prefs.getInt(_viewModeKey) ?? ViewMode.card.index;
       viewMode = ViewMode.values[viewModeIndex];
@@ -56,17 +62,62 @@ class SettingsModel extends ChangeNotifier {
       final navPosIndex = prefs.getInt(_navPositionKey) ?? NavPosition.bottom.index;
       navPosition = NavPosition.values[navPosIndex];
 
+      final themePresetIndex = prefs.getInt(_themePresetKey) ?? ThemePreset.classic.index;
+      themePreset = ThemePreset.values[themePresetIndex];
+
+      final particleIndex = prefs.getInt(_particleEffectKey) ?? ParticleEffect.none.index;
+      particleEffect = ParticleEffect.values[particleIndex];
+
       fontSize = prefs.getDouble(_fontSizeKey) ?? 14.0;
       borderRadius = prefs.getDouble(_borderRadiusKey) ?? 12.0;
       final accentColorValue = prefs.getInt(_accentColorKey) ?? Colors.teal.value;
       accentColor = Color(accentColorValue);
       seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
       
+      _applyThemePresetColors();
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
       musicSourcePaths = [];
     }
+  }
+
+  void _applyThemePresetColors() {
+    switch (themePreset) {
+      case ThemePreset.fox:
+        accentColor = const Color(0xFFFB923C); // Orange
+        break;
+      case ThemePreset.anime:
+        accentColor = const Color(0xFFF472B6); // Pink
+        break;
+      case ThemePreset.azure:
+        accentColor = const Color(0xFF38BDF8); // Sky Blue
+        break;
+      case ThemePreset.cosmic:
+        accentColor = const Color(0xFFA855F7); // Purple
+        break;
+      case ThemePreset.sunset:
+        accentColor = const Color(0xFFF87171); // Rose
+        break;
+      case ThemePreset.midnight:
+        accentColor = const Color(0xFF6366F1); // Indigo
+        break;
+      default:
+        break;
+    }
+  }
+
+  Future<void> setThemePreset(ThemePreset preset) async {
+    themePreset = preset;
+    _applyThemePresetColors();
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setParticleEffect(ParticleEffect effect) async {
+    particleEffect = effect;
+    notifyListeners();
+    await _saveSettings();
   }
 
   Future<void> setNavPosition(NavPosition position) async {
@@ -89,6 +140,7 @@ class SettingsModel extends ChangeNotifier {
 
   Future<void> setAccentColor(Color color) async {
     accentColor = color;
+    themePreset = ThemePreset.classic; // Reset preset if manual color chosen
     notifyListeners();
     await _saveSettings();
   }
@@ -173,6 +225,8 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setInt(_themeModeKey, themeMode.index);
       await prefs.setInt(_viewModeKey, viewMode.index);
       await prefs.setInt(_navPositionKey, navPosition.index);
+      await prefs.setInt(_themePresetKey, themePreset.index);
+      await prefs.setInt(_particleEffectKey, particleEffect.index);
       await prefs.setDouble(_fontSizeKey, fontSize);
       await prefs.setDouble(_borderRadiusKey, borderRadius);
       await prefs.setInt(_accentColorKey, accentColor.value);

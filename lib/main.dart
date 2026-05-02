@@ -15,6 +15,7 @@ import 'services/responsive.dart';
 import 'widgets/cover_art_texture.dart';
 import 'widgets/glass_container.dart';
 import 'widgets/settings_drawer.dart';
+import 'widgets/particle_system.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -204,6 +205,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
               endDrawer: const SettingsDrawer(),
               body: Stack(
                 children: [
+                  ParticleSystem(effect: settings.particleEffect),
                   Opacity(
                     opacity: uiOpacity,
                     child: IgnorePointer(

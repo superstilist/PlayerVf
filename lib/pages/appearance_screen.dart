@@ -26,37 +26,25 @@ class AppearanceScreen extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 10.h),
             physics: const BouncingScrollPhysics(),
             children: [
-              _buildSectionTitle('Theme & Accent'),
+              _buildSectionTitle('Theme Presets'),
               _buildGlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Brightness Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text('Select Atmosphere', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _buildThemeButton(context, settings, 'Light', ThemeMode.light, Icons.wb_sunny_rounded),
-                        _buildThemeButton(context, settings, 'Dark', ThemeMode.dark, Icons.nightlight_round),
-                        _buildThemeButton(context, settings, 'System', ThemeMode.system, Icons.brightness_auto_rounded),
-                      ],
-                    ),
-                    const Divider(height: 40, color: Colors.white10),
-                    const Text('Accent Color', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 54,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
                         children: [
-                          _buildColorOption(context, settings, Colors.teal),
-                          _buildColorOption(context, settings, const Color(0xFF6366f1)), // Indigo
-                          _buildColorOption(context, settings, const Color(0xFFec4899)), // Pink
-                          _buildColorOption(context, settings, const Color(0xFFf59e0b)), // Amber
-                          _buildColorOption(context, settings, const Color(0xFF10b981)), // Emerald
-                          _buildColorOption(context, settings, const Color(0xFFef4444)), // Red
-                          _buildColorOption(context, settings, const Color(0xFF8b5cf6)), // Violet
-                          _buildColorOption(context, settings, const Color(0xFF06b6d4)), // Cyan
+                          _buildPresetButton(context, settings, 'Classic', ThemePreset.classic, Icons.palette_outlined),
+                          _buildPresetButton(context, settings, 'Fox', ThemePreset.fox, Icons.auto_awesome_rounded),
+                          _buildPresetButton(context, settings, 'Anime', ThemePreset.anime, Icons.face_retouching_natural_rounded),
+                          _buildPresetButton(context, settings, 'Azure', ThemePreset.azure, Icons.water_drop_rounded),
+                          _buildPresetButton(context, settings, 'Cosmic', ThemePreset.cosmic, Icons.rocket_launch_rounded),
+                          _buildPresetButton(context, settings, 'Sunset', ThemePreset.sunset, Icons.wb_twilight_rounded),
+                          _buildPresetButton(context, settings, 'Midnight', ThemePreset.midnight, Icons.dark_mode_rounded),
                         ],
                       ),
                     ),
@@ -65,66 +53,63 @@ class AppearanceScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Library Layout'),
+              _buildSectionTitle('Visual Effects'),
               _buildGlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Navigation Position', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text('Particle Overlays', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _buildNavPosButton(context, settings, 'Top', NavPosition.top, Icons.keyboard_arrow_up_rounded),
-                        _buildNavPosButton(context, settings, 'Bottom', NavPosition.bottom, Icons.keyboard_arrow_down_rounded),
-                        _buildNavPosButton(context, settings, 'Left', NavPosition.left, Icons.keyboard_arrow_left_rounded),
-                        _buildNavPosButton(context, settings, 'Right', NavPosition.right, Icons.keyboard_arrow_right_rounded),
-                      ],
-                    ),
-                    const Divider(height: 40, color: Colors.white10),
-                    const Text('Default View', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _buildViewModeButton(context, settings, 'Grid View', ViewMode.card, Icons.grid_view_rounded),
-                        _buildViewModeButton(context, settings, 'List View', ViewMode.list, Icons.format_list_bulleted_rounded),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _buildParticleButton(context, settings, 'None', ParticleEffect.none, Icons.block_rounded),
+                          _buildParticleButton(context, settings, 'Sakura', ParticleEffect.sakura, Icons.filter_vintage_rounded),
+                          _buildParticleButton(context, settings, 'Snow', ParticleEffect.snow, Icons.ac_unit_rounded),
+                          _buildParticleButton(context, settings, 'Stars', ParticleEffect.stars, Icons.star_rounded),
+                          _buildParticleButton(context, settings, 'Bubbles', ParticleEffect.bubbles, Icons.bubble_chart_rounded),
+                          _buildParticleButton(context, settings, 'Rain', ParticleEffect.rain, Icons.umbrella_rounded),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Sizing & Optimization'),
+              _buildSectionTitle('Theme Mode'),
+              _buildGlassCard(
+                child: Row(
+                  children: [
+                    _buildThemeButton(context, settings, 'Light', ThemeMode.light, Icons.wb_sunny_rounded),
+                    _buildThemeButton(context, settings, 'Dark', ThemeMode.dark, Icons.nightlight_round),
+                    _buildThemeButton(context, settings, 'System', ThemeMode.system, Icons.brightness_auto_rounded),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              _buildSectionTitle('Library Layout'),
               _buildGlassCard(
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      title: const Text('Dynamic Grid Layout', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      subtitle: const Text('Scales music cards based on window size', style: TextStyle(fontSize: 11, color: Colors.white38)),
-                      value: settings.useAutoCardCount,
-                      onChanged: (v) => settings.setUseAutoCardCount(v),
-                      activeColor: settings.accentColor,
-                      contentPadding: EdgeInsets.zero,
+                    Row(
+                      children: [
+                        _buildViewModeButton(context, settings, 'Grid View', ViewMode.card, Icons.grid_view_rounded),
+                        _buildViewModeButton(context, settings, 'List View', ViewMode.list, Icons.format_list_bulleted_rounded),
+                      ],
                     ),
                     const Divider(height: 32, color: Colors.white10),
-                    
-                    // Unified Size Control
                     _buildSliderRow(
                       context, 
                       settings.viewMode == ViewMode.card ? 'Grid Card Size' : 'List Item Height', 
                       settings.cardSize, 80, 300, 
                       (v) => settings.setCardSize(v)
                     ),
-                    
-                    if (!settings.useAutoCardCount && settings.viewMode == ViewMode.card) ...[
-                       const Divider(height: 24, color: Colors.white10),
-                       _buildSliderRow(context, 'Cards per Row', settings.cardCount.toDouble(), 1, 10, (v) => settings.setCardCount(v.toInt()), divisions: 9),
-                    ],
-                    
                     const Divider(height: 24, color: Colors.white10),
                     _buildSliderRow(context, 'Global Spacing', settings.cardMargins, 0, 32, (v) => settings.setCardMargins(v)),
-                    const Divider(height: 24, color: Colors.white10),
-                    _buildSliderRow(context, 'Top Safe Area', settings.topMargin, 0, 120, (v) => settings.setTopMargin(v)),
                   ],
                 ),
               ),
@@ -172,6 +157,60 @@ class AppearanceScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildPresetButton(BuildContext context, SettingsModel settings, String label, ThemePreset preset, IconData icon) {
+    final isSelected = settings.themePreset == preset;
+    return Container(
+      width: 85,
+      margin: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: () => settings.setThemePreset(preset),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? settings.accentColor.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isSelected ? settings.accentColor.withOpacity(0.5) : Colors.white10, width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? settings.accentColor : Colors.white38, size: 22),
+              const SizedBox(height: 6),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? settings.accentColor : Colors.white38)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParticleButton(BuildContext context, SettingsModel settings, String label, ParticleEffect effect, IconData icon) {
+    final isSelected = settings.particleEffect == effect;
+    return Container(
+      width: 85,
+      margin: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: () => settings.setParticleEffect(effect),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? settings.accentColor.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isSelected ? settings.accentColor.withOpacity(0.5) : Colors.white10, width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? settings.accentColor : Colors.white38, size: 22),
+              const SizedBox(height: 6),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? settings.accentColor : Colors.white38)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSliderRow(BuildContext context, String label, double val, double min, double max, ValueChanged<double> cb, {int? divisions}) {
     final settings = Provider.of<SettingsModel>(context, listen: false);
     return Column(
@@ -194,13 +233,8 @@ class AppearanceScreen extends StatelessWidget {
             thumbColor: settings.accentColor,
           ),
           child: Slider(
-            value: val.clamp(min, max), 
-            min: min, 
-            max: max, 
-            divisions: divisions, 
-            onChanged: (v) {
-              cb(v);
-            },
+            value: val.clamp(min, max), min: min, max: max, divisions: divisions, 
+            onChanged: cb,
           ),
         ),
       ],
@@ -235,34 +269,6 @@ class AppearanceScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildNavPosButton(BuildContext context, SettingsModel settings, String label, NavPosition position, IconData icon) {
-    final isSelected = settings.navPosition == position;
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: InkWell(
-          onTap: () => settings.setNavPosition(position),
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: isSelected ? settings.accentColor.withOpacity(0.12) : Colors.white.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: isSelected ? settings.accentColor.withOpacity(0.5) : Colors.white10, width: 1.5),
-            ),
-            child: Column(
-              children: [
-                Icon(icon, color: isSelected ? settings.accentColor : Colors.white38, size: 20),
-                const SizedBox(height: 6),
-                Text(label, style: TextStyle(fontSize: 10, color: isSelected ? settings.accentColor : Colors.white38)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildViewModeButton(BuildContext context, SettingsModel settings, String label, ViewMode mode, IconData icon) {
     final isSelected = settings.viewMode == mode;
     return Expanded(
@@ -288,22 +294,6 @@ class AppearanceScreen extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildColorOption(BuildContext context, SettingsModel settings, Color color) {
-    final isSelected = settings.accentColor.value == color.value;
-    return GestureDetector(
-      onTap: () => settings.setAccentColor(color),
-      child: Container(
-        width: 44, height: 44, margin: const EdgeInsets.only(right: 14),
-        decoration: BoxDecoration(
-          color: color, shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.white, width: 3) : Border.all(color: Colors.white10, width: 1),
-          boxShadow: isSelected ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 10, spreadRadius: 2)] : null,
-        ),
-        child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 22) : null,
       ),
     );
   }
