@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum ViewMode { card, list }
+enum NavPosition { top, bottom, left, right }
+
 class SettingsModel extends ChangeNotifier {
   static const String _musicPathsKey = 'music_source_paths';
   static const String _cardSizeKey = 'card_size';
@@ -9,6 +12,12 @@ class SettingsModel extends ChangeNotifier {
   static const String _useAutoCardCountKey = 'use_auto_card_count';
   static const String _themeModeKey = 'theme_mode';
   static const String _topMarginKey = 'top_margin';
+  static const String _viewModeKey = 'view_mode';
+  static const String _fontSizeKey = 'font_size';
+  static const String _borderRadiusKey = 'border_radius';
+  static const String _accentColorKey = 'accent_color';
+  static const String _seekStepSecondsKey = 'seek_step_seconds';
+  static const String _navPositionKey = 'nav_position';
 
   List<String> musicSourcePaths = [];
   double cardSize = 140.0;
@@ -17,6 +26,12 @@ class SettingsModel extends ChangeNotifier {
   int cardCount = 3;
   bool useAutoCardCount = true;
   ThemeMode themeMode = ThemeMode.dark;
+  ViewMode viewMode = ViewMode.card;
+  NavPosition navPosition = NavPosition.bottom;
+  double fontSize = 14.0;
+  double borderRadius = 12.0;
+  Color accentColor = Colors.teal;
+  int seekStepSeconds = 5;
 
   SettingsModel() {
     loadSettings();
@@ -34,12 +49,60 @@ class SettingsModel extends ChangeNotifier {
       
       final themeIndex = prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
       themeMode = ThemeMode.values[themeIndex];
+
+      final viewModeIndex = prefs.getInt(_viewModeKey) ?? ViewMode.card.index;
+      viewMode = ViewMode.values[viewModeIndex];
+
+      final navPosIndex = prefs.getInt(_navPositionKey) ?? NavPosition.bottom.index;
+      navPosition = NavPosition.values[navPosIndex];
+
+      fontSize = prefs.getDouble(_fontSizeKey) ?? 14.0;
+      borderRadius = prefs.getDouble(_borderRadiusKey) ?? 12.0;
+      final accentColorValue = prefs.getInt(_accentColorKey) ?? Colors.teal.value;
+      accentColor = Color(accentColorValue);
+      seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
       
       notifyListeners();
     } catch (e) {
-      print('Error loading settings: $e');
+      debugPrint('Error loading settings: $e');
       musicSourcePaths = [];
     }
+  }
+
+  Future<void> setNavPosition(NavPosition position) async {
+    navPosition = position;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setFontSize(double size) async {
+    fontSize = size;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setBorderRadius(double radius) async {
+    borderRadius = radius;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setAccentColor(Color color) async {
+    accentColor = color;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setSeekStepSeconds(int seconds) async {
+    seekStepSeconds = seconds;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setViewMode(ViewMode mode) async {
+    viewMode = mode;
+    notifyListeners();
+    await _saveSettings();
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -108,8 +171,14 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setInt(_cardCountKey, cardCount);
       await prefs.setBool(_useAutoCardCountKey, useAutoCardCount);
       await prefs.setInt(_themeModeKey, themeMode.index);
+      await prefs.setInt(_viewModeKey, viewMode.index);
+      await prefs.setInt(_navPositionKey, navPosition.index);
+      await prefs.setDouble(_fontSizeKey, fontSize);
+      await prefs.setDouble(_borderRadiusKey, borderRadius);
+      await prefs.setInt(_accentColorKey, accentColor.value);
+      await prefs.setInt(_seekStepSecondsKey, seekStepSeconds);
     } catch (e) {
-      print('Error saving settings: $e');
+      debugPrint('Error saving settings: $e');
     }
   }
 }

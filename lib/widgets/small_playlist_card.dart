@@ -3,9 +3,8 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import '../models/playlist_model.dart';
 import '../services/music_service.dart';
-import '../models/music_model.dart';
-import '../models/cover_model.dart';
 import '../services/responsive.dart';
+import 'glass_container.dart';
 
 class SmallPlaylistCard extends StatelessWidget {
   final Playlist playlist;
@@ -26,11 +25,10 @@ class SmallPlaylistCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.s),
-          color: Colors.grey[900],
-        ),
+      child: GlassContainer(
+        borderRadius: BorderRadius.circular(12.s),
+        color: Colors.grey[900]?.withOpacity(0.4),
+        blur: 15.0,
         padding: EdgeInsets.all(12.s),
         child: Row(
           children: [

@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
 import '../widgets/audio_effects_menu.dart';
+import '../widgets/glass_container.dart';
+import 'appearance_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -12,101 +15,91 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final musicService = context.read<MusicService>();
     final theme = Theme.of(context);
-    
+
     return Consumer<SettingsModel>(
       builder: (context, settings, child) {
         return Scaffold(
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
             backgroundColor: Colors.transparent,
             elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             children: [
               _buildSectionTitle('Audio'),
-              _buildSettingCard(
+              _buildGlassSettingCard(
                 child: ListTile(
                   leading: const Icon(Icons.equalizer_rounded, color: Colors.teal),
                   title: const Text('Audio Effects'),
-                  subtitle: const Text('Equalizer, Pitch, Speed, Reverb'),
+                  subtitle: const Text('Equalizer, pitch, speed, reverb'),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
                   onTap: () => showAudioEffectsMenu(context),
                 ),
               ),
               const SizedBox(height: 24),
-
-              _buildSectionTitle('Theme & Style'),
-              _buildSettingCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('App Theme', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildThemeButton(context, settings, 'Light', ThemeMode.light, Icons.light_mode_rounded),
-                        _buildThemeButton(context, settings, 'Dark', ThemeMode.dark, Icons.dark_mode_rounded),
-                        _buildThemeButton(context, settings, 'System', ThemeMode.system, Icons.settings_suggest_rounded),
-                      ],
-                    ),
-                  ],
+              _buildSectionTitle('Interface'),
+              _buildGlassSettingCard(
+                child: ListTile(
+                  leading: Icon(Icons.palette_rounded, color: settings.accentColor),
+                  title: const Text('Appearance'),
+                  subtitle: const Text('Theme, colors, layout, typography'),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AppearanceScreen())),
                 ),
               ),
               const SizedBox(height: 24),
-              _buildSectionTitle('Layout & Appearance'),
-              _buildSettingCard(
+              _buildSectionTitle('Playback'),
+              _buildGlassSettingCard(
+                child: SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: Colors.teal,
+                  title: const Text('Remember playback'),
+                  subtitle: const Text('Restore current song, queue, and exact stopped timestamp when the app opens again.'),
+                  value: musicService.rememberPlayback,
+                  onChanged: musicService.setRememberPlayback,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildGlassSettingCard(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SwitchListTile(
-                      title: const Text('Auto Card Layout'),
-                      subtitle: Text('Automatically fit cards to screen', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12)),
-                      value: settings.useAutoCardCount,
-                      onChanged: (v) => settings.setUseAutoCardCount(v),
-                      activeColor: Colors.teal,
-                      contentPadding: EdgeInsets.zero,
+                    const Text('Seek Step', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Desktop hotkeys use this jump amount for left/right arrows and A / D.',
+                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
                     ),
-                    const Divider(height: 24),
-                    if (settings.useAutoCardCount)
-                      _buildSliderRow(
-                        context,
-                        'Preferred Size',
-                        settings.cardSize,
-                        80, 300,
-                        (v) => settings.setCardSize(v),
-                      )
-                    else
-                      _buildSliderRow(
-                        context,
-                        'Cards per Row',
-                        settings.cardCount.toDouble(),
-                        1, 10,
-                        (v) => settings.setCardCount(v.toInt()),
-                        divisions: 9,
-                      ),
-                    const Divider(height: 24),
-                    _buildSliderRow(
-                      context,
-                      'Spacing',
-                      settings.cardMargins,
-                      0, 32,
-                      (v) => settings.setCardMargins(v),
-                    ),
-                    const Divider(height: 24),
-                    _buildSliderRow(
-                      context,
-                      'Top Margin',
-                      settings.topMargin,
-                      0, 200,
-                      (v) => settings.setTopMargin(v),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [5, 10, 15, 30].map((seconds) {
+                        final selected = settings.seekStepSeconds == seconds;
+                        return ChoiceChip(
+                          label: Text('$seconds sec'),
+                          selected: selected,
+                          onSelected: (_) => settings.setSeekStepSeconds(seconds),
+                          selectedColor: Colors.teal.withOpacity(0.2),
+                          labelStyle: TextStyle(
+                            color: selected ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.8),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Music Library'),
-              _buildSettingCard(
+              _buildGlassSettingCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -130,17 +123,26 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Maintenance'),
-              _buildSettingCard(
+              _buildGlassSettingCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Cache & Optimization', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Clear cached cover art and metadata if images are not showing correctly.', 
-                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 12)),
+                    const Text('Library Tools', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _updateAllMusic(context, settings, musicService),
+                      icon: const Icon(Icons.system_update_alt_rounded),
+                      label: const Text('Update All Player Music'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 45),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => _showClearCacheDialog(context, musicService),
+                      onPressed: musicService.isLoadingSystemMusic ? null : () => _showClearCacheDialog(context, musicService),
                       icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
                       label: const Text('Clear Cache', style: TextStyle(color: Colors.redAccent)),
                       style: OutlinedButton.styleFrom(
@@ -153,9 +155,6 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 40),
-              Center(
-                child: Text('Version 1.2.0', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.4), fontSize: 12)),
-              ),
             ],
           ),
         );
@@ -163,65 +162,45 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildThemeButton(BuildContext context, SettingsModel settings, String label, ThemeMode mode, IconData icon) {
-    final isSelected = settings.themeMode == mode;
-    final theme = Theme.of(context);
-    
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: InkWell(
-          onTap: () => settings.setThemeMode(mode),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.teal.withOpacity(0.2) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.1),
-                width: 1.5,
-              ),
-            ),
-            child: Column(
-              children: [
-                Icon(icon, color: isSelected ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6)),
-                const SizedBox(height: 4),
-                Text(label, style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.teal : theme.colorScheme.onSurface.withOpacity(0.6),
-                )),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  void _updateAllMusic(BuildContext context, SettingsModel settings, MusicService musicService) {
+    final paths = settings.musicSourcePaths.isEmpty ? null : settings.musicSourcePaths;
+    musicService.loadSystemMusic(customPaths: paths, clearExisting: true);
   }
 
   void _showClearCacheDialog(BuildContext context, MusicService musicService) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Cache?'),
-        content: const Text('This will delete all cached cover art and metadata. The app will need to re-scan your music library.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        backgroundColor: Colors.transparent,
+        contentPadding: EdgeInsets.zero,
+        content: GlassContainer(
+          padding: const EdgeInsets.all(24),
+          borderRadius: BorderRadius.circular(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Clear Cache?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text('This will delete cached cover art and metadata, then rescan your music library.', textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      musicService.clearCache();
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    child: const Text('Clear'),
+                  ),
+                ],
+              )
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              musicService.clearCache();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Cache cleared. Re-scanning...'), backgroundColor: Colors.teal),
-              );
-            },
-            child: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -236,64 +215,27 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingCard({required Widget child}) {
-    return Builder(
-      builder: (context) {
-        final theme = Theme.of(context);
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: child,
-        );
-      }
-    );
-  }
-
-  Widget _buildSliderRow(BuildContext context, String label, double val, double min, double max, ValueChanged<double> cb, {int? divisions}) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontSize: 14)),
-              Text(val.toStringAsFixed(0), style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          Slider(
-            value: val,
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: cb,
-            activeColor: Colors.teal,
-            inactiveColor: theme.colorScheme.onSurface.withOpacity(0.1),
-          ),
-        ],
-      ),
+  Widget _buildGlassSettingCard({required Widget child}) {
+    return GlassContainer(
+      padding: const EdgeInsets.all(16),
+      borderRadius: BorderRadius.circular(20),
+      child: child,
     );
   }
 
   Widget _buildPathTile(BuildContext context, SettingsModel settings, String path) {
-    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withOpacity(0.05),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
           const Icon(Icons.folder_open_rounded, size: 20, color: Colors.grey),
           const SizedBox(width: 12),
-          Expanded(child: Text(path, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7), fontSize: 13), overflow: TextOverflow.ellipsis)),
+          Expanded(child: Text(path, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
           IconButton(
             icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.redAccent),
             onPressed: () => settings.removeMusicPath(path),

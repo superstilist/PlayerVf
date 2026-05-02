@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import '../models/playlist_model.dart';
 import '../services/music_service.dart';
 import '../models/music_model.dart';
-import '../models/cover_model.dart';
+import '../models/settings_model.dart';
+import '../services/responsive.dart';
+import 'cover_art_texture.dart';
+import 'glass_container.dart';
 
 class PlaylistCard extends StatelessWidget {
   final Playlist playlist;
@@ -19,278 +22,153 @@ class PlaylistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsModel>(context);
     final musicService = Provider.of<MusicService>(context);
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
-    final coverList = musicService.getCoverListForPlaylist(playlist.id);
 
     return GestureDetector(
       onTap: onTap,
-      onSecondaryTapDown: (details) {
-        _showContextMenu(context, details.globalPosition);
-      },
-      onLongPress: () {
-        _showContextMenuFromLongPress(context);
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
+      onSecondaryTapDown: (details) => _showGlassContextMenu(context, details.globalPosition),
+      onLongPress: () => _showGlassContextMenuFromLongPress(context),
+      child: GlassContainer(
+        borderRadius: BorderRadius.circular(settings.borderRadius.s + 8),
+        padding: EdgeInsets.all(12.s),
+        color: Colors.white.withOpacity(0.05),
+        blur: 10,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(settings.borderRadius.s),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(settings.borderRadius.s),
+                  child: _buildPlaylistCover(musicList),
+                ),
+              ),
+            ),
+            SizedBox(height: 12.h),
+            Text(
+              playlist.name,
+              style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.bold, color: Colors.white),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 2.h),
+            Text(
+              '${musicList.length} Tracks',
+              style: TextStyle(fontSize: 10.sp, color: Colors.white54),
             ),
           ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(
-            aspectRatio: 1.0,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildPlaylistCover(musicList, coverList),
-                
-                // Transparent gradient overlay with text
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.7),
-                      ],
-                      stops: const [0.5, 1.0],
-                    ),
-                  ),
-                ),
-                
-                // Playlist name text
-                Positioned(
-                  left: 8,
-                  right: 8,
-                  bottom: 8,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        playlist.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${musicList.length} song${musicList.length != 1 ? 's' : ''}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
-                          fontSize: 8,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black54,
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
   }
 
-  Widget _buildPlaylistCover(List<Music> musicList, List<Cover> coverList) {
-    if (musicList.isEmpty) {
+  Widget _buildPlaylistCover(List<Music> musicList) {
+    final musicWithCovers = musicList.where((m) => m.coverPath.isNotEmpty).toList();
+    if (musicWithCovers.isEmpty) {
       return _buildEmptyPlaylistCover();
-    } else if (musicList.length == 1) {
-      return _buildSingleSongCover(coverList.first);
+    } else if (musicWithCovers.length == 1) {
+      return _buildSingleSongCover(musicWithCovers.first.coverPath);
     } else {
-      return _buildMultipleSongsCover(coverList);
+      return _buildMultipleSongsCover(musicWithCovers);
     }
   }
 
   Widget _buildEmptyPlaylistCover() {
     return Container(
+      width: double.infinity,
+      height: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.purple.shade700,
-            Colors.purple.shade900,
-            Colors.black,
-          ],
+          colors: [Colors.teal.shade800, Colors.teal.shade400],
         ),
       ),
-      child: const Center(
-        child: Icon(
-          Icons.playlist_play,
-          color: Colors.white54,
-          size: 30,
-        ),
-      ),
+      child: const Center(child: Icon(Icons.playlist_play_rounded, color: Colors.white30, size: 40)),
     );
   }
 
-  Widget _buildSingleSongCover(Cover cover) {
-    if (cover.imageData != null) {
-      return Image.memory(
-        cover.imageData!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildPlaceholderCover();
-        },
-      );
-    } else {
-      return _buildPlaceholderCover();
-    }
+  Widget _buildSingleSongCover(String coverPath) {
+    return CoverArtTexture(coverArtPath: coverPath, width: double.infinity, height: double.infinity);
   }
 
-  Widget _buildMultipleSongsCover(List<Cover> coverList) {
-    // Take first 2 covers for the split cover effect
-    final firstCover = coverList.isNotEmpty ? coverList[0] : Cover();
-    final secondCover = coverList.length > 1 ? coverList[1] : Cover();
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.purple.shade700,
-            Colors.purple.shade900,
-            Colors.black,
+  Widget _buildMultipleSongsCover(List<Music> musicList) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double halfWidth = constraints.maxWidth / 2;
+        return Row(
+          children: [
+            Expanded(child: CoverArtTexture(coverArtPath: musicList[0].coverPath, width: halfWidth, height: double.infinity)),
+            Expanded(child: CoverArtTexture(coverArtPath: musicList[1].coverPath, width: halfWidth, height: double.infinity)),
           ],
-        ),
-      ),
-      child: Row(
+        );
+      },
+    );
+  }
+
+  void _showGlassContextMenuFromLongPress(BuildContext context) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final card = context.findRenderObject() as RenderBox;
+    final position = card.localToGlobal(Offset.zero, ancestor: overlay);
+    final centerPosition = Offset(position.dx + card.size.width / 2, position.dy + card.size.height / 2);
+    _showGlassContextMenu(context, centerPosition);
+  }
+
+  void _showGlassContextMenu(BuildContext context, Offset position) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) => Stack(
         children: [
-          Expanded(
-            child: _buildCoverImage(firstCover, Alignment.topLeft),
-          ),
-          Expanded(
-            child: _buildCoverImage(secondCover, Alignment.bottomRight),
+          Positioned(
+            left: position.dx,
+            top: position.dy,
+            child: Material(
+              color: Colors.transparent,
+              child: GlassContainer(
+                width: 180,
+                padding: const EdgeInsets.all(8),
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildMenuItem(context, 'Play Playlist', Icons.play_arrow_rounded, Colors.teal, () {
+                      Provider.of<MusicService>(context, listen: false).playPlaylist(playlist.id);
+                    }),
+                    if (onDelete != null) ...[
+                      const Divider(color: Colors.white10),
+                      _buildMenuItem(context, 'Delete', Icons.delete_outline_rounded, Colors.redAccent, () => onDelete?.call()),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCoverImage(Cover cover, Alignment alignment) {
-    return Container(
-      alignment: alignment,
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.black.withOpacity(0.3),
-            width: 2,
-          ),
-        ),
-        child: cover.imageData != null
-            ? Image.memory(
-                cover.imageData!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholderCover();
-                },
-              )
-            : _buildPlaceholderCover(),
+  Widget _buildMenuItem(BuildContext context, String title, IconData icon, Color color, VoidCallback action) {
+    return InkWell(
+      onTap: () { Navigator.pop(context); action(); },
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(children: [Icon(icon, color: color, size: 20), const SizedBox(width: 12), Text(title, style: const TextStyle(color: Colors.white, fontSize: 13))]),
       ),
     );
-  }
-
-  Widget _buildPlaceholderCover() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.teal.shade700,
-            Colors.teal.shade900,
-            Colors.black,
-          ],
-        ),
-      ),
-      child: const Center(
-        child: Icon(
-          Icons.music_note,
-          color: Colors.white54,
-          size: 20,
-        ),
-      ),
-    );
-  }
-
-  void _showContextMenuFromLongPress(BuildContext context) {
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RenderBox card = context.findRenderObject() as RenderBox;
-    final position = card.localToGlobal(Offset.zero, ancestor: overlay);
-    final centerPosition = Offset(
-      position.dx + card.size.width / 2,
-      position.dy + card.size.height / 2,
-    );
-    _showContextMenu(context, centerPosition);
-  }
-
-  void _showContextMenu(BuildContext context, Offset position) {
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
-      color: Colors.grey[850],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      items: [
-        PopupMenuItem<String>(
-          value: 'play',
-          child: Row(
-            children: [
-              Icon(Icons.play_arrow, color: Colors.teal[300], size: 20),
-              const SizedBox(width: 12),
-              const Text('Play', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(Icons.delete, color: Colors.red[300], size: 20),
-              const SizedBox(width: 12),
-              Text('Delete', style: TextStyle(color: Colors.red[300])),
-            ],
-          ),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'play') {
-        onTap();
-      } else if (value == 'delete') {
-        onDelete?.call();
-      }
-    });
   }
 }

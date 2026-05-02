@@ -6,7 +6,7 @@ class Responsive {
   static late double screenWidth;
   static late double screenHeight;
   static late double pixelRatio;
-  static late double textScaleFactor;
+  static double globalFontSizeFactor = 1.0;
 
   // Reference design size (using a standard 375x812 as base)
   static const double refWidth = 375;
@@ -17,7 +17,6 @@ class Responsive {
     screenWidth = _mediaQueryData.size.width;
     screenHeight = _mediaQueryData.size.height;
     pixelRatio = _mediaQueryData.devicePixelRatio;
-    textScaleFactor = _mediaQueryData.textScaleFactor;
   }
 
   /// The ratio between current screen and design screen (smaller side)
@@ -43,7 +42,7 @@ class Responsive {
   static double h(double height) => height * _cappedScaleH;
 
   /// Scales font size based on width to maintain readability
-  static double sp(double fontSize) => fontSize * _cappedScale;
+  static double sp(double fontSize) => fontSize * _cappedScale * globalFontSizeFactor;
 
   /// Scales based on the smaller dimension (shortest side) - useful for icons/images
   static double s(double size) => size * _cappedScale;
