@@ -74,7 +74,6 @@ class SettingsModel extends ChangeNotifier {
       accentColor = Color(accentColorValue);
       seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
       
-      _applyThemePresetColors();
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -82,25 +81,31 @@ class SettingsModel extends ChangeNotifier {
     }
   }
 
-  void _applyThemePresetColors() {
-    switch (themePreset) {
+  void _applyThemeDefaults(ThemePreset preset) {
+    switch (preset) {
       case ThemePreset.fox:
-        accentColor = const Color(0xFFFB923C); // Orange
+        accentColor = const Color(0xFFFB923C);
+        particleEffect = ParticleEffect.snow;
         break;
       case ThemePreset.anime:
-        accentColor = const Color(0xFFF472B6); // Pink
+        accentColor = const Color(0xFFF472B6);
+        particleEffect = ParticleEffect.sakura;
         break;
       case ThemePreset.azure:
-        accentColor = const Color(0xFF38BDF8); // Sky Blue
+        accentColor = const Color(0xFF38BDF8);
+        particleEffect = ParticleEffect.bubbles;
         break;
       case ThemePreset.cosmic:
-        accentColor = const Color(0xFFA855F7); // Purple
+        accentColor = const Color(0xFFA855F7);
+        particleEffect = ParticleEffect.stars;
         break;
       case ThemePreset.sunset:
-        accentColor = const Color(0xFFF87171); // Rose
+        accentColor = const Color(0xFFF87171);
+        particleEffect = ParticleEffect.none;
         break;
       case ThemePreset.midnight:
-        accentColor = const Color(0xFF6366F1); // Indigo
+        accentColor = const Color(0xFF6366F1);
+        particleEffect = ParticleEffect.rain;
         break;
       default:
         break;
@@ -109,15 +114,19 @@ class SettingsModel extends ChangeNotifier {
 
   Future<void> setThemePreset(ThemePreset preset) async {
     themePreset = preset;
-    _applyThemePresetColors();
+    _applyThemeDefaults(preset);
     notifyListeners();
     await _saveSettings();
   }
 
   Future<void> setParticleEffect(ParticleEffect effect) async {
-    particleEffect = effect;
-    notifyListeners();
-    await _saveSettings();
+    // If user manual change anything, go to classic
+    if (particleEffect != effect) {
+      themePreset = ThemePreset.classic;
+      particleEffect = effect;
+      notifyListeners();
+      await _saveSettings();
+    }
   }
 
   Future<void> setNavPosition(NavPosition position) async {
@@ -139,10 +148,12 @@ class SettingsModel extends ChangeNotifier {
   }
 
   Future<void> setAccentColor(Color color) async {
-    accentColor = color;
-    themePreset = ThemePreset.classic; // Reset preset if manual color chosen
-    notifyListeners();
-    await _saveSettings();
+    if (accentColor.value != color.value) {
+      accentColor = color;
+      themePreset = ThemePreset.classic; // manual choice always classic
+      notifyListeners();
+      await _saveSettings();
+    }
   }
 
   Future<void> setSeekStepSeconds(int seconds) async {

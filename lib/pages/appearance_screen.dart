@@ -79,6 +79,26 @@ class AppearanceScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
+              _buildSectionTitle('Navigation Layout'),
+              _buildGlassCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Panel Position', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _buildNavPosButton(context, settings, 'Top', NavPosition.top, Icons.align_vertical_top_rounded),
+                        _buildNavPosButton(context, settings, 'Down', NavPosition.bottom, Icons.align_vertical_bottom_rounded),
+                        _buildNavPosButton(context, settings, 'Left', NavPosition.left, Icons.align_horizontal_left_rounded),
+                        _buildNavPosButton(context, settings, 'Right', NavPosition.right, Icons.align_horizontal_right_rounded),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
               _buildSectionTitle('Theme Mode'),
               _buildGlassCard(
                 child: Row(
@@ -205,6 +225,34 @@ class AppearanceScreen extends StatelessWidget {
               const SizedBox(height: 6),
               Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? settings.accentColor : Colors.white38)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavPosButton(BuildContext context, SettingsModel settings, String label, NavPosition position, IconData icon) {
+    final isSelected = settings.navPosition == position;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: InkWell(
+          onTap: () => settings.setNavPosition(position),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: isSelected ? settings.accentColor.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isSelected ? settings.accentColor.withOpacity(0.5) : Colors.white10, width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Icon(icon, color: isSelected ? settings.accentColor : Colors.white38, size: 22),
+                const SizedBox(height: 6),
+                Text(label, style: TextStyle(fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? settings.accentColor : Colors.white38)),
+              ],
+            ),
           ),
         ),
       ),

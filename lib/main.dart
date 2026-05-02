@@ -205,7 +205,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
               endDrawer: const SettingsDrawer(),
               body: Stack(
                 children: [
-                  ParticleSystem(effect: settings.particleEffect),
                   Opacity(
                     opacity: uiOpacity,
                     child: IgnorePointer(
@@ -241,6 +240,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                       maintainState: true,
                       child: PlayerPage(onClose: _closePlayer),
                     ),
+                  ),
+                  
+                  // Particle System at the very top so it shows everywhere
+                  IgnorePointer(
+                    child: ParticleSystem(effect: settings.particleEffect),
                   ),
                 ],
               ),
