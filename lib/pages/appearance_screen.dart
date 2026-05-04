@@ -58,7 +58,7 @@ class AppearanceScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Particle Overlays', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text('Particle Overlays', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70)),
                     const SizedBox(height: 16),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -74,6 +74,25 @@ class AppearanceScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              _buildSectionTitle('Video'),
+              _buildGlassCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSwitchRow('Play Video in Background', settings.playVideoBackground, (val) => settings.setPlayVideoBackground(val), settings),
+                    const Divider(height: 20, color: Colors.white10),
+                    _buildSwitchRow('Cover Art: Show Live Video', settings.videoCoverShowLive, (val) => settings.setVideoCoverShowLive(val), settings),
+                    const SizedBox(height: 4),
+                    Text('When OFF, shows first frame as static image', style: TextStyle(fontSize: 11, color: Colors.white30)),
+                    const Divider(height: 20, color: Colors.white10),
+                    _buildSwitchRow('Double-Tap Fullscreen', settings.videoDoubleTapFullscreen, (val) => settings.setVideoDoubleTapFullscreen(val), settings),
+                    const SizedBox(height: 4),
+                    Text('Double-tap cover art to open video fullscreen', style: TextStyle(fontSize: 11, color: Colors.white30)),
                   ],
                 ),
               ),
@@ -174,6 +193,20 @@ class AppearanceScreen extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       color: Colors.white.withOpacity(0.03),
       child: child,
+    );
+  }
+
+  Widget _buildSwitchRow(String label, bool value, ValueChanged<bool> onChanged, SettingsModel settings) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70))),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: settings.accentColor,
+        ),
+      ],
     );
   }
 

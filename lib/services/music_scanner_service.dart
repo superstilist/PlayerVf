@@ -23,6 +23,10 @@ class MusicScannerService {
     '.aac',
     '.ogg',
     '.wma',
+    '.mp4',
+    '.mkv',
+    '.webm',
+    '.avi',
   ];
 
   /// Debug flag - when true, prints all music paths found

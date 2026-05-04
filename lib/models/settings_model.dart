@@ -22,6 +22,9 @@ class SettingsModel extends ChangeNotifier {
   static const String _navPositionKey = 'nav_position';
   static const String _themePresetKey = 'theme_preset';
   static const String _particleEffectKey = 'particle_effect';
+  static const String _playVideoBackgroundKey = 'play_video_background';
+  static const String _videoCoverShowLiveKey = 'video_cover_show_live';
+  static const String _videoDoubleTapFullscreenKey = 'video_double_tap_fullscreen';
 
   List<String> musicSourcePaths = [];
   double cardSize = 140.0;
@@ -38,6 +41,9 @@ class SettingsModel extends ChangeNotifier {
   double borderRadius = 12.0;
   Color accentColor = Colors.teal;
   int seekStepSeconds = 5;
+  bool playVideoBackground = true;
+  bool videoCoverShowLive = true;
+  bool videoDoubleTapFullscreen = true;
 
   SettingsModel() {
     loadSettings();
@@ -73,6 +79,9 @@ class SettingsModel extends ChangeNotifier {
       final accentColorValue = prefs.getInt(_accentColorKey) ?? Colors.teal.value;
       accentColor = Color(accentColorValue);
       seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
+      playVideoBackground = prefs.getBool(_playVideoBackgroundKey) ?? true;
+      videoCoverShowLive = prefs.getBool(_videoCoverShowLiveKey) ?? true;
+      videoDoubleTapFullscreen = prefs.getBool(_videoDoubleTapFullscreenKey) ?? true;
       
       notifyListeners();
     } catch (e) {
@@ -204,6 +213,24 @@ class SettingsModel extends ChangeNotifier {
     await _saveSettings();
   }
 
+  Future<void> setPlayVideoBackground(bool playVideo) async {
+    playVideoBackground = playVideo;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setVideoCoverShowLive(bool showLive) async {
+    videoCoverShowLive = showLive;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setVideoDoubleTapFullscreen(bool enabled) async {
+    videoDoubleTapFullscreen = enabled;
+    notifyListeners();
+    await _saveSettings();
+  }
+
   Future<void> addMusicPath(String path) async {
     if (!musicSourcePaths.contains(path)) {
       musicSourcePaths.add(path);
@@ -242,6 +269,9 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setDouble(_borderRadiusKey, borderRadius);
       await prefs.setInt(_accentColorKey, accentColor.value);
       await prefs.setInt(_seekStepSecondsKey, seekStepSeconds);
+      await prefs.setBool(_playVideoBackgroundKey, playVideoBackground);
+      await prefs.setBool(_videoCoverShowLiveKey, videoCoverShowLive);
+      await prefs.setBool(_videoDoubleTapFullscreenKey, videoDoubleTapFullscreen);
     } catch (e) {
       debugPrint('Error saving settings: $e');
     }

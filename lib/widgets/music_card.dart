@@ -49,7 +49,7 @@ class MusicCard extends StatelessWidget {
         margin: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
         color: Colors.white.withOpacity(0.06),
         borderRadius: BorderRadius.circular((settings.borderRadius + 4).s),
-        blur: 10.0,
+        blur: 0.0,
         child: Container(
           height: tileHeight,
           alignment: Alignment.center,
@@ -120,13 +120,6 @@ class MusicCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(settings.borderRadius.s),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 6.s,
-              offset: Offset(0, 3.h),
-            ),
-          ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(settings.borderRadius.s),
@@ -162,7 +155,7 @@ class MusicCard extends StatelessWidget {
                       padding: EdgeInsets.all(4.s),
                       color: Colors.black.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(8.s),
-                      blur: 8.0,
+                      blur: 0.0,
                       child: Icon(
                         music.isFavorite ? Icons.favorite : Icons.favorite_border,
                         color: music.isFavorite ? settings.accentColor : Colors.white,

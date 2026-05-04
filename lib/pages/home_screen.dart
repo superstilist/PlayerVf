@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -160,8 +161,7 @@ class HomeScreen extends StatelessWidget {
                   height: artworkSize,
                   color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(28.s),
-                  blur: 15.0,
-                  border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1), width: 1),
+                  blur: 0.0,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(28.s),
                     child: _buildPlaylistCollage(musicList, icon, color),
@@ -209,22 +209,66 @@ class HomeScreen extends StatelessWidget {
       );
     }
 
-    return Column(
+    // High-quality 2x2 grid collage with no gaps
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(child: CoverArtTexture(coverArtPath: musicWithCovers[0].coverPath, width: double.infinity, height: double.infinity)),
-              Expanded(child: CoverArtTexture(coverArtPath: musicWithCovers[1].coverPath, width: double.infinity, height: double.infinity)),
-            ],
-          ),
+        Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Image.file(
+                      io.File(musicWithCovers[0].coverPath),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[0].coverPath, width: double.infinity, height: double.infinity),
+                    ),
+                  ),
+                  Expanded(
+                    child: Image.file(
+                      io.File(musicWithCovers[1].coverPath),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[1].coverPath, width: double.infinity, height: double.infinity),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Image.file(
+                      io.File(musicWithCovers[2].coverPath),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[2].coverPath, width: double.infinity, height: double.infinity),
+                    ),
+                  ),
+                  Expanded(
+                    child: Image.file(
+                      io.File(musicWithCovers[3].coverPath),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[3].coverPath, width: double.infinity, height: double.infinity),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(child: CoverArtTexture(coverArtPath: musicWithCovers[2].coverPath, width: double.infinity, height: double.infinity)),
-              Expanded(child: CoverArtTexture(coverArtPath: musicWithCovers[3].coverPath, width: double.infinity, height: double.infinity)),
-            ],
+        // Subtle gradient overlay for a polished look
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black.withOpacity(0.15)],
+            ),
           ),
         ),
       ],
@@ -249,8 +293,7 @@ class HomeScreen extends StatelessWidget {
                   height: artworkSize,
                   color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(28.s),
-                  blur: 15.0,
-                  border: Border.all(color: Colors.teal.withOpacity(0.3), width: 1),
+                  blur: 0.0,
                   child: Center(child: Icon(Icons.add_rounded, color: Colors.teal, size: 60.s)),
                 ),
                 SizedBox(height: 10.h),

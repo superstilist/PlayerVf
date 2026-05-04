@@ -32,11 +32,11 @@ class _ParticleSystemState extends State<ParticleSystem> with SingleTickerProvid
 
   int _getParticleCount() {
     switch (widget.effect) {
-      case ParticleEffect.sakura: return 40;
-      case ParticleEffect.snow: return 60;
-      case ParticleEffect.stars: return 80;
-      case ParticleEffect.bubbles: return 30;
-      case ParticleEffect.rain: return 100;
+      case ParticleEffect.sakura: return 15;
+      case ParticleEffect.snow: return 25;
+      case ParticleEffect.stars: return 40;
+      case ParticleEffect.bubbles: return 15;
+      case ParticleEffect.rain: return 40;
       default: return 0;
     }
   }

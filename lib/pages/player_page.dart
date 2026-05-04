@@ -9,6 +9,8 @@ import '../services/responsive.dart';
 import '../widgets/audio_effects_menu.dart';
 import '../widgets/cover_art_texture.dart';
 import '../widgets/glass_container.dart';
+import '../models/settings_model.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 class PlayerPage extends StatefulWidget {
   final VoidCallback onClose;
@@ -57,6 +59,7 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final musicService = Provider.of<MusicService>(context);
+    final settings = Provider.of<SettingsModel>(context);
     final currentMusic = musicService.currentMusic;
     _syncPalette(currentMusic?.coverPath);
 
@@ -69,27 +72,9 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
           backgroundColor: Colors.transparent,
           body: Stack(
             children: [
-              // ── Background Blur layer ──
+              // ── Background layer ──
               Positioned.fill(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 1000),
-                  child: CoverArtTexture(
-                    key: ValueKey(currentMusic?.coverPath ?? 'empty'),
-                    coverArtPath: currentMusic?.coverPath ?? '',
-                    width: double.infinity,
-                    height: double.infinity,
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 80.0, sigmaY: 80.0),
-                  child: Container(
-                    color: theme.brightness == Brightness.dark
-                        ? Colors.black.withOpacity(0.6)
-                        : Colors.white.withOpacity(0.5),
-                  ),
-                ),
+                child: _buildBackground(musicService, settings, currentMusic, theme),
               ),
 
               // ── Maximalist Background Text ──
@@ -131,7 +116,7 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(height: 10.h),
-                            _buildHeroArtwork(currentMusic, palette),
+                            _buildHeroArtwork(currentMusic, palette, musicService, settings),
                             
                             SizedBox(height: 48.h),
 
@@ -198,8 +183,79 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildHeroArtwork(Music? music, CoverArtPalette palette) {
+  /// Build the full-screen background: video or blurred cover art
+  Widget _buildBackground(MusicService musicService, SettingsModel settings, Music? currentMusic, ThemeData theme) {
+    final bool showVideo = musicService.isCurrentMediaVideo && settings.playVideoBackground && musicService.videoController != null;
+    
+    return AnimatedSwitcher(
+      duration: const Duration(seconds: 1),
+      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+      child: Stack(
+        key: ValueKey('${showVideo ? 'video' : 'art'}-${currentMusic?.id}'),
+        fit: StackFit.expand,
+        children: [
+          // ALWAYS SHOW COVER ART (Base Layer / Fallback / Placeholder)
+          CoverArtTexture(
+            coverArtPath: currentMusic?.coverPath ?? '',
+            width: double.infinity,
+            height: double.infinity,
+          ),
+
+          // Overlay Video if available and enabled
+          if (showVideo)
+            SizedBox.expand(
+              child: Video(
+                controller: musicService.videoController!,
+                fit: BoxFit.cover,
+                controls: NoVideoControls,
+              ),
+            ),
+
+          // Blur Layer: Only apply blur if we are in "Art Mode" (no video showing)
+          if (!showVideo)
+            ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+
+          // Final Dimming Overlay
+          Container(
+            color: theme.brightness == Brightness.dark
+                ? Colors.black.withOpacity(showVideo ? 0.45 : 0.75)
+                : Colors.white.withOpacity(showVideo ? 0.45 : 0.75),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroArtwork(Music? music, CoverArtPalette palette, MusicService musicService, SettingsModel settings) {
     final size = 320.s;
+    final bool hasVideo = musicService.isCurrentMediaVideo && musicService.videoController != null;
+    final bool showLiveVideo = hasVideo && settings.videoCoverShowLive;
+
+    // STACKED CONTENT: Cover art is always the base, Video overlays if live
+    Widget artworkContent = Stack(
+      fit: StackFit.expand,
+      children: [
+        CoverArtTexture(
+          coverArtPath: music?.coverPath ?? '',
+          width: size,
+          height: size,
+        ),
+        if (showLiveVideo)
+          SizedBox.expand(
+            child: Video(
+              controller: musicService.videoController!,
+              fit: BoxFit.cover,
+              controls: NoVideoControls,
+            ),
+          ),
+      ],
+    );
+
     return Center(
       child: Stack(
         alignment: Alignment.center,
@@ -208,15 +264,8 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
             duration: const Duration(seconds: 1),
             width: size * 0.9,
             height: size * 0.9,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: palette.accent.withOpacity(0.35),
-                  blurRadius: 80.s,
-                  spreadRadius: 25.s,
-                ),
-              ],
             ),
           ),
           AnimatedSwitcher(
@@ -227,34 +276,77 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                 child: ScaleTransition(scale: Tween<double>(begin: 0.85, end: 1.0).animate(animation), child: child),
               );
             },
-            child: Hero(
-              key: ValueKey(music?.id ?? 'none'),
-              tag: 'music-art-${music?.id ?? 'none'}',
-              child: Container(
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(40.s),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 25.s,
-                      offset: Offset(0, 15.h),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(40.s),
-                  child: CoverArtTexture(
-                    coverArtPath: music?.coverPath ?? '',
-                    width: size,
-                    height: size,
+            child: GestureDetector(
+              onDoubleTap: (hasVideo && settings.videoDoubleTapFullscreen)
+                  ? () => _openFullscreenVideo(context, musicService)
+                  : null,
+              child: Hero(
+                key: ValueKey(music?.id ?? 'none'),
+                tag: 'music-art-${music?.id ?? 'none'}',
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(40.s),
+                    color: Colors.black,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(40.s),
+                    child: artworkContent,
                   ),
                 ),
               ),
             ),
           ),
+          // Show a small fullscreen hint icon when video is available
+          if (hasVideo && settings.videoDoubleTapFullscreen)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: GestureDetector(
+                onTap: () => _openFullscreenVideo(context, musicService),
+                child: Container(
+                  padding: EdgeInsets.all(14.s),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(24.s),
+                      bottomRight: Radius.circular(40.s),
+                    ),
+                  ),
+                  child: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  void _openFullscreenVideo(BuildContext context, MusicService musicService) {
+    if (musicService.videoController == null) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                onDoubleTap: () => Navigator.of(context).pop(),
+                child: Center(
+                  child: Video(
+                    controller: musicService.videoController!,
+                    fit: BoxFit.contain,
+                    controls: NoVideoControls,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -271,30 +363,64 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
           ],
         );
       },
-      child: Column(
+      child: Row(
         key: ValueKey(music?.id ?? 'none'),
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            music?.title ?? 'Unknown Track',
-            style: TextStyle(
-              fontSize: 36.sp,
-              fontWeight: FontWeight.w900,
-              color: theme.colorScheme.onSurface,
-              height: 1.1,
-              letterSpacing: -1,
+          // Permanent Small Thumbnail (Visible even if main video is playing)
+          Container(
+            width: 60.s,
+            height: 60.s,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16.s),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            textAlign: TextAlign.left,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16.s),
+              child: CoverArtTexture(
+                coverArtPath: music?.coverPath ?? '',
+                width: 60.s,
+                height: 60.s,
+              ),
+            ),
           ),
-          SizedBox(height: 8.h),
-          Text(
-            music?.artist ?? 'Unknown Artist',
-            style: TextStyle(
-              fontSize: 20.sp,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+          SizedBox(width: 20.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  music?.title ?? 'Unknown Track',
+                  style: TextStyle(
+                    fontSize: 32.sp,
+                    fontWeight: FontWeight.w900,
+                    color: theme.colorScheme.onSurface,
+                    height: 1.1,
+                    letterSpacing: -0.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  music?.artist ?? 'Unknown Artist',
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            textAlign: TextAlign.left,
           ),
         ],
       ),
@@ -376,13 +502,6 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: palette.accent,
-                    boxShadow: [
-                      BoxShadow(
-                        color: palette.accent.withOpacity(0.4),
-                        blurRadius: 25.s,
-                        offset: Offset(0, 10.h),
-                      ),
-                    ],
                   ),
                   child: ValueListenableBuilder<bool>(
                     valueListenable: musicService.playingNotifier,
@@ -410,6 +529,58 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                 onPressed: musicService.toggleRepeatMode,
               ),
             ],
+          ),
+
+          SizedBox(height: 24.h),
+          
+          // Volume Control with Percentage
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20.w),
+            child: ValueListenableBuilder<double>(
+              valueListenable: musicService.volumeNotifier,
+              builder: (context, volume, child) {
+                return Row(
+                  children: [
+                    Icon(
+                      volume == 0 ? Icons.volume_off_rounded : volume < 50 ? Icons.volume_down_rounded : Icons.volume_up_rounded,
+                      size: 20.s, 
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                    ),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 4.h,
+                          thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.s),
+                          activeTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
+                          inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.05),
+                          thumbColor: theme.colorScheme.onSurface.withOpacity(0.4),
+                          overlayColor: Colors.transparent,
+                        ),
+                        child: Slider(
+                          value: volume,
+                          min: 0,
+                          max: 100,
+                          onChanged: (val) => musicService.setVolume(val),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 40.w,
+                      child: Text(
+                        '${volume.toInt()}%',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface.withOpacity(0.3),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),

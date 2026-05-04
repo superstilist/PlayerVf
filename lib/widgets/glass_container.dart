@@ -21,7 +21,7 @@ class GlassContainer extends StatelessWidget {
     this.padding,
     this.margin,
     this.color,
-    this.blur = 10.0, // Reduced default blur for a more subtle effect
+    this.blur = 0.0, // Default to 0 for flat aesthetic
     this.border,
   });
 
@@ -29,8 +29,24 @@ class GlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fallbackColor = theme.brightness == Brightness.dark 
-        ? Colors.black.withOpacity(0.35) 
-        : Colors.white.withOpacity(0.35);
+        ? Colors.black.withOpacity(0.5) // Darker fallback for flat look
+        : Colors.white.withOpacity(0.5);
+
+    final innerContainer = Container(
+      width: width,
+      height: height,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color ?? fallbackColor,
+        borderRadius: borderRadius,
+        border: border ??
+            Border.all(
+              color: Colors.transparent,
+              width: 0,
+            ),
+      ),
+      child: child,
+    );
 
     return Container(
       width: width,
@@ -38,24 +54,12 @@ class GlassContainer extends StatelessWidget {
       margin: margin,
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            width: width,
-            height: height,
-            padding: padding,
-            decoration: BoxDecoration(
-              color: color ?? fallbackColor,
-              borderRadius: borderRadius,
-              border: border ??
-                  Border.all(
-                    color: Colors.white.withOpacity(0.12),
-                    width: 0.8,
-                  ),
-            ),
-            child: child,
-          ),
-        ),
+        child: blur > 0
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: innerContainer,
+              )
+            : innerContainer,
       ),
     );
   }

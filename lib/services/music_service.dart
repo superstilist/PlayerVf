@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' hide Playlist;
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,10 +23,14 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   late final Player _player;
+  VideoController? _videoController;
+  bool _videoControllerReady = false;
+  double _volume = 100.0;
 
   final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
   final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
+  final ValueNotifier<double> _volumeNotifier = ValueNotifier(100.0);
 
   bool _isInitialized = false;
   DateTime _lastPositionUpdate = DateTime.now();
@@ -52,6 +57,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   String? _resumeTrackId;
   Duration _resumePosition = Duration.zero;
   bool _shouldResumeCurrentTrack = false;
+  bool _hasVideoTrack = false;
 
   bool _isEffectsEnabled = true;
   bool _isEqualizerEnabled = false;
@@ -86,8 +92,20 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   MusicService() {
     WidgetsBinding.instance.addObserver(this);
     _player = Player();
+    _initVideoController();
     _initPlayer();
     _initializeAsync();
+  }
+
+  Future<void> _initVideoController() async {
+    try {
+      _videoController = VideoController(_player);
+      _videoControllerReady = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('VideoController not available on this platform: $e');
+      _videoControllerReady = false;
+    }
   }
 
   Future<void> _initializeAsync() async {
@@ -124,6 +142,18 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       _playingNotifier.value = state;
       _savePlaybackDebounced();
     });
+
+    // Detect video tracks at runtime (works for mp3/m4a with embedded video too)
+    _player.stream.tracks.listen((tracks) {
+      final hadVideo = _hasVideoTrack;
+      _hasVideoTrack = tracks.video.length > 1; // first track is usually "no video"
+      if (hadVideo != _hasVideoTrack) notifyListeners();
+    });
+
+    _player.stream.volume.listen((vol) {
+      _volume = vol;
+      _volumeNotifier.value = vol;
+    });
   }
 
   List<Music> get musicList => _musicList;
@@ -135,10 +165,26 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   ValueNotifier<Duration> get positionNotifier => _positionNotifier;
   ValueNotifier<Duration> get durationNotifier => _durationNotifier;
   ValueNotifier<bool> get playingNotifier => _playingNotifier;
+  ValueNotifier<double> get volumeNotifier => _volumeNotifier;
+  double get volume => _volume;
   bool get isLoadingSystemMusic => _isLoadingSystemMusic;
   int get systemMusicCount => _systemMusicCount;
   List<Playlist> get playlists => _playlists;
   bool get isShuffle => _isShuffle;
+  VideoController? get videoController => _videoController;
+  bool get videoControllerReady => _videoControllerReady;
+  bool get hasVideoTrack => _hasVideoTrack;
+  
+  /// Returns true if the current media has a video track AND video rendering is available.
+  /// Works for standalone video files AND audio files with embedded video.
+  bool get isCurrentMediaVideo {
+    if (currentMusic == null || !_videoControllerReady) return false;
+    // Runtime detection is priority
+    if (_hasVideoTrack) return true;
+    // Extension fallback for known video formats
+    final ext = currentMusic!.filePath.split('.').last.toLowerCase();
+    return ['mp4', 'mkv', 'webm', 'avi', 'mov'].contains(ext);
+  }
   bool get isRepeatOne => _isRepeatOne;
   bool get isRepeatAll => _isRepeatAll;
   bool get isEffectsEnabled => _isEffectsEnabled;
@@ -398,6 +444,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
       final startPosition =
           (_shouldResumeCurrentTrack && _resumeTrackId == trackId) ? _resumePosition : Duration.zero;
+      _hasVideoTrack = false; // Reset before opening new media
       await _player.open(Media(track.filePath), play: false);
       _openedMusicId = trackId;
 
@@ -467,6 +514,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     _shouldResumeCurrentTrack = position > Duration.zero;
     _savePlaybackDebounced();
     notifyListeners();
+  }
+
+  void setVolume(double volume) {
+    _player.setVolume(volume);
   }
 
   void next() {

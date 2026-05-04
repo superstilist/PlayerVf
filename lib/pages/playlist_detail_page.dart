@@ -46,10 +46,7 @@ class PlaylistDetailPage extends StatelessWidget {
                     key: ValueKey(bgPath),
                     children: [
                       CoverArtTexture(coverArtPath: bgPath, width: double.infinity, height: double.infinity),
-                      BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                        child: Container(color: Colors.black.withOpacity(0.75)),
-                      ),
+                      Container(color: Colors.black.withOpacity(0.85)),
                     ],
                   ),
                 ),
@@ -73,13 +70,6 @@ class PlaylistDetailPage extends StatelessWidget {
                                 height: 220.s,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(32.s),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.5),
-                                      blurRadius: 30.s,
-                                      offset: Offset(0, 15.h),
-                                    ),
-                                  ],
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(32.s),

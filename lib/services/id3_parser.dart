@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:id3/id3.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:image/image.dart' as img;
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 
@@ -534,9 +535,20 @@ class ID3Parser {
             dir.createSync(recursive: true);
           }
           
-          final coverFile = io.File('${dir.path}/${hash}_cover.jpg');
+          final coverFile = io.File('${dir.path}/${hash}_cover.png');
           if (!coverFile.existsSync()) {
-            coverFile.writeAsBytesSync(coverBytes);
+            try {
+              final image = img.decodeImage(coverBytes);
+              if (image != null) {
+                // PNG = lossless, best quality for album art
+                final pngBytes = img.encodePng(image, level: 6);
+                coverFile.writeAsBytesSync(pngBytes);
+              } else {
+                coverFile.writeAsBytesSync(coverBytes);
+              }
+            } catch (_) {
+              coverFile.writeAsBytesSync(coverBytes);
+            }
           }
           coverPath = coverFile.path;
           _coverCache[filePath] = coverPath; // Cache the cover path

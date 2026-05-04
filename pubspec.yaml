@@ -12,7 +12,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   # Audio playback
   media_kit: ^1.1.10
-  media_kit_libs_android_audio: ^1.2.0
+  media_kit_video: 1.2.4
+  media_kit_libs_android_video: ^1.0.4
   # State management
   provider: ^6.1.1
   # Path utilities
@@ -38,8 +39,9 @@ dependencies:
   on_audio_query: ^2.9.0
   sqflite_common_ffi: ^2.3.3
   sqlite3_flutter_libs: ^0.5.41
-  media_kit_libs_audio: any
+  media_kit_libs_video: any
   palette_generator: ^0.3.3+6
+  image: ^4.2.0
 
 dev_dependencies:
   flutter_test:
