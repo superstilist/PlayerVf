@@ -266,7 +266,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                 key: ValueKey(coverPath),
                 fit: StackFit.expand,
                 children: [
-                  CoverArtTexture(coverArtPath: coverPath, width: double.infinity, height: double.infinity),
+                  Transform.scale(
+                    scaleX: -1,
+                    child: CoverArtTexture(coverArtPath: coverPath, width: double.infinity, height: double.infinity),
+                  ),
                   BackdropFilter(filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70), child: Container(color: theme.colorScheme.surface.withOpacity(0.65))),
                 ],
               ),

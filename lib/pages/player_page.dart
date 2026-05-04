@@ -72,9 +72,9 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
           backgroundColor: Colors.transparent,
           body: Stack(
             children: [
-              // ── Background layer ──
+              // ── Background layer ── ALWAYS cover art, blurred, for BOTH music & video ──
               Positioned.fill(
-                child: _buildBackground(musicService, settings, currentMusic, theme),
+                child: _buildBackground(currentMusic, theme),
               ),
 
               // ── Maximalist Background Text ──
@@ -120,7 +120,7 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                             
                             SizedBox(height: 48.h),
 
-                            // ── Metadata section (Bigger & Left Aligned) ──
+                            // ── Metadata section ──
                             _buildMetadata(currentMusic, theme),
 
                             SizedBox(height: 40.h),
@@ -183,69 +183,65 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
     );
   }
 
-  /// Build the full-screen background: video or blurred cover art
-  Widget _buildBackground(MusicService musicService, SettingsModel settings, Music? currentMusic, ThemeData theme) {
-    final bool showVideo = musicService.isCurrentMediaVideo && settings.playVideoBackground && musicService.videoController != null;
-    
+  /// Background is ALWAYS the blurred cover art — regardless of whether
+  /// the current media is video or music, and regardless of any setting.
+  /// This gives a consistent, immersive look.
+  Widget _buildBackground(Music? currentMusic, ThemeData theme) {
     return AnimatedSwitcher(
-      duration: const Duration(seconds: 1),
-      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+      duration: const Duration(milliseconds: 800),
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
       child: Stack(
-        key: ValueKey('${showVideo ? 'video' : 'art'}-${currentMusic?.id}'),
+        key: ValueKey(currentMusic?.id ?? 'bg-none'),
         fit: StackFit.expand,
         children: [
-          // ALWAYS SHOW COVER ART (Base Layer / Fallback / Placeholder)
+          // Full-screen cover art
           CoverArtTexture(
             coverArtPath: currentMusic?.coverPath ?? '',
             width: double.infinity,
             height: double.infinity,
           ),
-
-          // Overlay Video if available and enabled
-          if (showVideo)
-            SizedBox.expand(
-              child: Video(
-                controller: musicService.videoController!,
-                fit: BoxFit.cover,
-                controls: NoVideoControls,
+          // Blur overlay
+          ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+              child: Container(
+                color: theme.brightness == Brightness.dark
+                    ? Colors.black.withOpacity(0.45)
+                    : Colors.white.withOpacity(0.35),
               ),
             ),
-
-          // Blur Layer: Only apply blur if we are in "Art Mode" (no video showing)
-          if (!showVideo)
-            ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-
-          // Final Dimming Overlay
-          Container(
-            color: theme.brightness == Brightness.dark
-                ? Colors.black.withOpacity(showVideo ? 0.45 : 0.75)
-                : Colors.white.withOpacity(showVideo ? 0.45 : 0.75),
           ),
         ],
       ),
     );
   }
 
+  /// Hero artwork card:
+  /// - MUSIC: always shows cover art (no video).
+  /// - VIDEO: shows live video in the card if [settings.videoCoverShowLive] is true
+  ///          AND [settings.playVideoBackground] is true; otherwise shows cover art.
   Widget _buildHeroArtwork(Music? music, CoverArtPalette palette, MusicService musicService, SettingsModel settings) {
     final size = 320.s;
-    final bool hasVideo = musicService.isCurrentMediaVideo && musicService.videoController != null;
-    final bool showLiveVideo = hasVideo && settings.videoCoverShowLive;
+    final bool isVideo = musicService.isCurrentMediaVideo;
+    final bool hasVideoController = musicService.videoController != null;
 
-    // STACKED CONTENT: Cover art is always the base, Video overlays if live
-    Widget artworkContent = Stack(
+    // For video: show live video in the card only if BOTH settings are enabled.
+    final bool showLiveVideoInCard =
+        isVideo && hasVideoController && settings.playVideoBackground && settings.videoCoverShowLive;
+
+    // Build the artwork content for the card (cover art always as base; video overlays if needed)
+    Widget cardContent = Stack(
       fit: StackFit.expand,
       children: [
+        // Cover art is always the base layer in the card
         CoverArtTexture(
           coverArtPath: music?.coverPath ?? '',
           width: size,
           height: size,
         ),
-        if (showLiveVideo)
+        // Live video overlays for video media only
+        if (showLiveVideoInCard)
           SizedBox.expand(
             child: Video(
               controller: musicService.videoController!,
@@ -273,11 +269,14 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
             transitionBuilder: (child, animation) {
               return FadeTransition(
                 opacity: animation,
-                child: ScaleTransition(scale: Tween<double>(begin: 0.85, end: 1.0).animate(animation), child: child),
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.85, end: 1.0).animate(animation),
+                  child: child,
+                ),
               );
             },
             child: GestureDetector(
-              onDoubleTap: (hasVideo && settings.videoDoubleTapFullscreen)
+              onDoubleTap: (isVideo && hasVideoController && settings.videoDoubleTapFullscreen)
                   ? () => _openFullscreenVideo(context, musicService)
                   : null,
               child: Hero(
@@ -292,14 +291,14 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(40.s),
-                    child: artworkContent,
+                    child: cardContent,
                   ),
                 ),
               ),
             ),
           ),
-          // Show a small fullscreen hint icon when video is available
-          if (hasVideo && settings.videoDoubleTapFullscreen)
+          // Fullscreen hint icon for video
+          if (isVideo && hasVideoController && settings.videoDoubleTapFullscreen)
             Positioned(
               bottom: 0,
               right: 0,
@@ -363,64 +362,35 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
           ],
         );
       },
-      child: Row(
+      child: Column(
         key: ValueKey(music?.id ?? 'none'),
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Permanent Small Thumbnail (Visible even if main video is playing)
-          Container(
-            width: 60.s,
-            height: 60.s,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16.s),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+          Text(
+            music?.title ?? 'Unknown Track',
+            style: TextStyle(
+              fontSize: 36.sp,
+              fontWeight: FontWeight.w900,
+              color: theme.colorScheme.onSurface,
+              height: 1.1,
+              letterSpacing: -1,
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16.s),
-              child: CoverArtTexture(
-                coverArtPath: music?.coverPath ?? '',
-                width: 60.s,
-                height: 60.s,
-              ),
-            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.left,
           ),
-          SizedBox(width: 20.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  music?.title ?? 'Unknown Track',
-                  style: TextStyle(
-                    fontSize: 32.sp,
-                    fontWeight: FontWeight.w900,
-                    color: theme.colorScheme.onSurface,
-                    height: 1.1,
-                    letterSpacing: -0.5,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  music?.artist ?? 'Unknown Artist',
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          SizedBox(height: 8.h),
+          Text(
+            music?.artist ?? 'Unknown Artist',
+            style: TextStyle(
+              fontSize: 20.sp,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.left,
           ),
         ],
       ),
