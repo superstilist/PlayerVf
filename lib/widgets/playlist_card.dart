@@ -28,7 +28,8 @@ class PlaylistCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      onSecondaryTapDown: (details) => _showGlassContextMenu(context, details.globalPosition),
+      onSecondaryTapDown: (details) =>
+          _showGlassContextMenu(context, details.globalPosition),
       onLongPress: () => _showGlassContextMenuFromLongPress(context),
       child: GlassContainer(
         borderRadius: BorderRadius.circular(settings.borderRadius.s + 8),
@@ -59,7 +60,10 @@ class PlaylistCard extends StatelessWidget {
             SizedBox(height: 12.h),
             Text(
               playlist.name,
-              style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -75,7 +79,8 @@ class PlaylistCard extends StatelessWidget {
   }
 
   Widget _buildPlaylistCover(List<Music> musicList) {
-    final musicWithCovers = musicList.where((m) => m.coverPath.isNotEmpty).toList();
+    final musicWithCovers =
+        musicList.where((m) => m.coverPath.isNotEmpty).toList();
     if (musicWithCovers.isEmpty) {
       return _buildEmptyPlaylistCover();
     } else if (musicWithCovers.length == 1) {
@@ -96,22 +101,74 @@ class PlaylistCard extends StatelessWidget {
           colors: [Colors.teal.shade800, Colors.teal.shade400],
         ),
       ),
-      child: const Center(child: Icon(Icons.playlist_play_rounded, color: Colors.white30, size: 40)),
+      child: const Center(
+          child: Icon(Icons.playlist_play_rounded,
+              color: Colors.white30, size: 40)),
     );
   }
 
   Widget _buildSingleSongCover(String coverPath) {
-    return CoverArtTexture(coverArtPath: coverPath, width: double.infinity, height: double.infinity);
+    return CoverArtTexture(
+        coverArtPath: coverPath,
+        width: double.infinity,
+        height: double.infinity);
   }
 
   Widget _buildMultipleSongsCover(List<Music> musicList) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double halfWidth = constraints.maxWidth / 2;
-        return Row(
+        if (musicList.length < 4) {
+          return Row(
+            children: [
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[0].coverPath,
+                      width: halfWidth,
+                      height: double.infinity)),
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[1].coverPath,
+                      width: halfWidth,
+                      height: double.infinity)),
+            ],
+          );
+        }
+
+        return Column(
           children: [
-            Expanded(child: CoverArtTexture(coverArtPath: musicList[0].coverPath, width: halfWidth, height: double.infinity)),
-            Expanded(child: CoverArtTexture(coverArtPath: musicList[1].coverPath, width: halfWidth, height: double.infinity)),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[0].coverPath,
+                          width: halfWidth,
+                          height: double.infinity)),
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[1].coverPath,
+                          width: halfWidth,
+                          height: double.infinity)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[2].coverPath,
+                          width: halfWidth,
+                          height: double.infinity)),
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[3].coverPath,
+                          width: halfWidth,
+                          height: double.infinity)),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -122,7 +179,8 @@ class PlaylistCard extends StatelessWidget {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final card = context.findRenderObject() as RenderBox;
     final position = card.localToGlobal(Offset.zero, ancestor: overlay);
-    final centerPosition = Offset(position.dx + card.size.width / 2, position.dy + card.size.height / 2);
+    final centerPosition = Offset(
+        position.dx + card.size.width / 2, position.dy + card.size.height / 2);
     _showGlassContextMenu(context, centerPosition);
   }
 
@@ -144,12 +202,19 @@ class PlaylistCard extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildMenuItem(context, 'Play Playlist', Icons.play_arrow_rounded, Colors.teal, () {
-                      Provider.of<MusicService>(context, listen: false).playPlaylist(playlist.id);
+                    _buildMenuItem(context, 'Play Playlist',
+                        Icons.play_arrow_rounded, Colors.teal, () {
+                      Provider.of<MusicService>(context, listen: false)
+                          .playPlaylist(playlist.id);
                     }),
                     if (onDelete != null) ...[
                       const Divider(color: Colors.white10),
-                      _buildMenuItem(context, 'Delete', Icons.delete_outline_rounded, Colors.redAccent, () => onDelete?.call()),
+                      _buildMenuItem(
+                          context,
+                          'Delete',
+                          Icons.delete_outline_rounded,
+                          Colors.redAccent,
+                          () => onDelete?.call()),
                     ],
                   ],
                 ),
@@ -161,13 +226,21 @@ class PlaylistCard extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, String title, IconData icon, Color color, VoidCallback action) {
+  Widget _buildMenuItem(BuildContext context, String title, IconData icon,
+      Color color, VoidCallback action) {
     return InkWell(
-      onTap: () { Navigator.pop(context); action(); },
+      onTap: () {
+        Navigator.pop(context);
+        action();
+      },
       borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(children: [Icon(icon, color: color, size: 20), const SizedBox(width: 12), Text(title, style: const TextStyle(color: Colors.white, fontSize: 13))]),
+        child: Row(children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 13))
+        ]),
       ),
     );
   }

@@ -9,6 +9,8 @@ import 'pages/home_screen.dart';
 import 'pages/favorite_page.dart';
 import 'pages/playlist_page.dart';
 import 'pages/player_page.dart';
+import 'pages/video_page.dart';
+import 'pages/youtube_music_page.dart';
 import 'services/music_service.dart';
 import 'models/settings_model.dart';
 import 'services/responsive.dart';
@@ -30,7 +32,8 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider<SettingsModel>(create: (_) => SettingsModel()),
-        ChangeNotifierProvider<MusicService>(create: (_) => MusicService()..loadSystemMusic()),
+        ChangeNotifierProvider<MusicService>(
+            create: (_) => MusicService()..loadSystemMusic()),
       ],
       child: const MyApp(),
     ),
@@ -47,26 +50,110 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           title: 'PlayerVf',
           themeMode: settings.themeMode,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: settings.accentColor,
-              brightness: Brightness.light,
-            ),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: settings.accentColor,
-              brightness: Brightness.dark,
-              surface: Colors.black,
-            ),
-            scaffoldBackgroundColor: Colors.black,
-          ),
+          theme: _buildAppTheme(settings.accentColor, Brightness.light),
+          darkTheme: _buildAppTheme(settings.accentColor, Brightness.dark),
           home: const MainNavigationScreen(),
           debugShowCheckedModeBanner: false,
         );
       },
+    );
+  }
+
+  ThemeData _buildAppTheme(Color seed, Brightness brightness) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+      surface: brightness == Brightness.dark
+          ? const Color(0xFF101112)
+          : const Color(0xFFF8FAF9),
+    );
+    final radius = BorderRadius.circular(14);
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      splashFactory: InkSparkle.splashFactory,
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        backgroundColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: scheme.onSurfaceVariant,
+          hoverColor: scheme.primary.withOpacity(0.08),
+          highlightColor: scheme.primary.withOpacity(0.10),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 44),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          minimumSize: const Size(48, 44),
+          backgroundColor: scheme.primaryContainer,
+          foregroundColor: scheme.onPrimaryContainer,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 44),
+          side: BorderSide(color: scheme.outlineVariant),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: radius),
+        iconColor: scheme.primary,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      ),
+      chipTheme: ChipThemeData(
+        side: BorderSide(color: scheme.outlineVariant),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: scheme.primary,
+        inactiveTrackColor: scheme.surfaceContainerHighest,
+        thumbColor: scheme.primary,
+        overlayColor: scheme.primary.withOpacity(0.12),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.onPrimary
+              : scheme.outline,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.primary
+              : scheme.surfaceContainerHighest,
+        ),
+      ),
     );
   }
 }
@@ -78,7 +165,8 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> with SingleTickerProviderStateMixin {
+class _MainNavigationScreenState extends State<MainNavigationScreen>
+    with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   bool _isPlayerVisible = false;
   late AnimationController _playerAnimationController;
@@ -104,7 +192,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
       parent: _playerAnimationController,
       curve: Curves.easeOutQuart,
     ));
-    
+
     _playerAnimationController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -119,10 +207,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
   }
 
   List<Widget> get _screens => [
-    HomeScreen(searchQuery: _searchQuery),
-    FavoritePage(searchQuery: _searchQuery),
-    PlaylistPage(searchQuery: _searchQuery),
-  ];
+        HomeScreen(searchQuery: _searchQuery),
+        FavoritePage(searchQuery: _searchQuery),
+        PlaylistPage(searchQuery: _searchQuery),
+        YoutubeMusicPage(onOpenPlayer: _togglePlayer),
+      ];
 
   void _onDestinationSelected(int index) {
     if (index == _selectedIndex) return;
@@ -133,7 +222,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
 
   void _togglePlayer() {
     if (_playerAnimationController.isAnimating) return;
-    
+
     setState(() {
       _isPlayerVisible = !_isPlayerVisible;
       if (_isPlayerVisible) {
@@ -157,17 +246,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
 
     double leftOffset = 0;
     double rightOffset = 0;
-    final bool isVerticalNav = settings.navPosition == NavPosition.left || settings.navPosition == NavPosition.right;
-    
+    final bool isVerticalNav = settings.navPosition == NavPosition.left ||
+        settings.navPosition == NavPosition.right;
+
     if (settings.navPosition == NavPosition.left) {
-      leftOffset = 88.w; 
+      leftOffset = 88.w;
     } else if (settings.navPosition == NavPosition.right) {
       rightOffset = 88.w;
     }
 
     Widget mainLayout;
     final navDock = _buildNavigationDock(settings, theme);
-    
+
     if (isVerticalNav) {
       mainLayout = Row(
         children: [
@@ -186,7 +276,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
       );
     }
 
-    final double uiOpacity = (1.0 - _playerAnimationController.value).clamp(0.0, 1.0);
+    final double uiOpacity =
+        (1.0 - _playerAnimationController.value).clamp(0.0, 1.0);
 
     return Focus(
       autofocus: true,
@@ -198,7 +289,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
         },
         child: Stack(
           children: [
-            _buildGlobalBackground(musicService, theme),
+            _buildMicaBackground(musicService, theme),
             Scaffold(
               key: _scaffoldKey,
               backgroundColor: Colors.transparent,
@@ -226,7 +317,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                     Positioned(
                       left: leftOffset,
                       right: rightOffset,
-                      bottom: settings.navPosition == NavPosition.bottom ? 110.h : 24.h,
+                      bottom: settings.navPosition == NavPosition.bottom
+                          ? 110.h
+                          : 24.h,
                       child: Opacity(
                         opacity: uiOpacity,
                         child: _buildMiniPlayer(musicService),
@@ -236,12 +329,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
                   SlideTransition(
                     position: _playerSlideAnimation,
                     child: Visibility(
-                      visible: _isPlayerVisible || _playerAnimationController.isAnimating,
+                      visible: _isPlayerVisible ||
+                          _playerAnimationController.isAnimating,
                       maintainState: true,
-                      child: PlayerPage(onClose: _closePlayer),
+                      child: musicService.isCurrentMediaVideo
+                          ? VideoPage(onClose: _closePlayer)
+                          : PlayerPage(onClose: _closePlayer),
                     ),
                   ),
-                  
+
                   // Particle System at the very top so it shows everywhere
                   IgnorePointer(
                     child: ParticleSystem(effect: settings.particleEffect),
@@ -255,22 +351,46 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
     );
   }
 
-  Widget _buildGlobalBackground(MusicService musicService, ThemeData theme) {
+  Widget _buildMicaBackground(MusicService musicService, ThemeData theme) {
     final coverPath = musicService.currentMusic?.coverPath;
     return Positioned.fill(
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 1000),
+        duration: const Duration(milliseconds: 420),
         child: coverPath == null || coverPath.isEmpty
-            ? Container(key: const ValueKey('bg-empty'), decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [theme.colorScheme.surface, theme.colorScheme.surfaceContainerHighest])))
+            ? Container(
+                key: const ValueKey('bg-empty'),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      theme.colorScheme.surface,
+                      theme.colorScheme.surfaceContainerHighest
+                          .withOpacity(0.72),
+                    ],
+                  ),
+                ),
+              )
             : Stack(
                 key: ValueKey(coverPath),
                 fit: StackFit.expand,
                 children: [
+                  Container(color: theme.colorScheme.surface),
                   Transform.scale(
-                    scaleX: -1,
-                    child: CoverArtTexture(coverArtPath: coverPath, width: double.infinity, height: double.infinity),
+                    scale: 1.08,
+                    child: CoverArtTexture(
+                        coverArtPath: coverPath,
+                        width: double.infinity,
+                        height: double.infinity),
                   ),
-                  BackdropFilter(filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70), child: Container(color: theme.colorScheme.surface.withOpacity(0.65))),
+                  BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 84, sigmaY: 84),
+                      child: Container(
+                          color: theme.colorScheme.surface.withOpacity(
+                              theme.brightness == Brightness.dark
+                                  ? 0.78
+                                  : 0.84))),
                 ],
               ),
       ),
@@ -283,18 +403,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('PlayerVf', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: settings.accentColor)),
+          Text('PlayerVf',
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface)),
           Row(
             children: [
               IconButton(
-                icon: Icon(_isSearchOpen ? Icons.close_rounded : Icons.search_rounded),
+                icon: Icon(
+                    _isSearchOpen ? Icons.close_rounded : Icons.search_rounded),
                 onPressed: () => setState(() {
                   _isSearchOpen = !_isSearchOpen;
-                  if (!_isSearchOpen) { _searchController.clear(); _searchQuery = ''; }
+                  if (!_isSearchOpen) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  }
                 }),
               ),
               IconButton(
-                icon: const Icon(Icons.settings_rounded), 
+                icon: const Icon(Icons.settings_rounded),
                 onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
               ),
             ],
@@ -305,16 +433,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
   }
 
   Widget _buildNavigationDock(SettingsModel settings, ThemeData theme) {
-    final isVertical = settings.navPosition == NavPosition.left || settings.navPosition == NavPosition.right;
-    
+    final isVertical = settings.navPosition == NavPosition.left ||
+        settings.navPosition == NavPosition.right;
+
     return Padding(
       padding: EdgeInsets.all(12.s),
       child: GlassContainer(
         width: isVertical ? 72.w : double.infinity,
         height: isVertical ? double.infinity : 72.h,
-        borderRadius: BorderRadius.circular(32.s),
-        color: theme.colorScheme.onSurface.withOpacity(0.08),
-        blur: 12,
+        borderRadius: BorderRadius.circular(24.s),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.54),
+        blur: 22,
         child: Flex(
           direction: isVertical ? Axis.vertical : Axis.horizontal,
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -322,6 +451,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
             _buildNavItem(0, Icons.home_rounded),
             _buildNavItem(1, Icons.favorite_rounded),
             _buildNavItem(2, Icons.playlist_play_rounded),
+            _buildNavItem(3, Icons.library_music_rounded),
           ],
         ),
       ),
@@ -331,17 +461,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
   Widget _buildNavItem(int index, IconData icon) {
     final isSelected = _selectedIndex == index;
     final theme = Theme.of(context);
-    final settings = Provider.of<SettingsModel>(context, listen: false);
 
     return GestureDetector(
       onTap: () => _onDestinationSelected(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 350),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         padding: EdgeInsets.symmetric(horizontal: 12.s, vertical: 8.s),
         decoration: BoxDecoration(
-          color: isSelected ? settings.accentColor.withOpacity(0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20.s),
+          color: isSelected
+              ? theme.colorScheme.primaryContainer.withOpacity(0.72)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16.s),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -349,16 +481,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
           children: [
             Icon(
               icon,
-              color: isSelected ? settings.accentColor : theme.colorScheme.onSurface.withOpacity(0.4),
-              size: 26.s,
+              color: isSelected
+                  ? theme.colorScheme.onPrimaryContainer
+                  : theme.colorScheme.onSurfaceVariant,
+              size: 24.s,
             ),
-            if (isSelected)
-              Container(
-                margin: EdgeInsets.only(top: 4.h),
-                width: 4.s,
-                height: 4.s,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: settings.accentColor),
-              ),
           ],
         ),
       ),
@@ -376,11 +503,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
         ),
         Expanded(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeOutCubic,
             transitionBuilder: (child, animation) {
               return FadeTransition(opacity: animation, child: child);
             },
-            child: IndexedStack(key: ValueKey<int>(_selectedIndex), index: _selectedIndex, children: _screens),
+            child: IndexedStack(
+                key: ValueKey<int>(_selectedIndex),
+                index: _selectedIndex,
+                children: _screens),
           ),
         ),
       ],
@@ -389,14 +521,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
 
   Widget _buildSearchBar(ThemeData theme) {
     return GlassContainer(
-      borderRadius: BorderRadius.circular(16.s),
-      color: theme.colorScheme.onSurface.withOpacity(0.05),
-      blur: 8,
+      borderRadius: BorderRadius.circular(18.s),
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.56),
+      blur: 18,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: TextField(
           controller: _searchController,
-          decoration: const InputDecoration(hintText: 'Search your library...', border: InputBorder.none, icon: Icon(Icons.search_rounded)),
+          decoration: const InputDecoration(
+              hintText: 'Search your library...',
+              border: InputBorder.none,
+              icon: Icon(Icons.search_rounded)),
           onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
         ),
       ),
@@ -415,34 +550,59 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> with Single
         child: GlassContainer(
           height: 76.h,
           borderRadius: BorderRadius.circular(28.s),
-          blur: 15,
-          color: settings.accentColor.withOpacity(0.12),
-          border: Border.all(color: settings.accentColor.withOpacity(0.2)),
+          blur: 22,
+          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.62),
+          border: Border.all(
+              color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
           child: Padding(
             padding: const EdgeInsets.all(10.0),
             child: Row(
               children: [
-                Hero(tag: 'mini-player-art', child: ClipRRect(borderRadius: BorderRadius.circular(18.s), child: CoverArtTexture(coverArtPath: currentMusic.coverPath, width: 56.s, height: 56.s))),
+                Hero(
+                    tag: 'mini-player-art',
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18.s),
+                        child: CoverArtTexture(
+                            coverArtPath: currentMusic.coverPath,
+                            width: 56.s,
+                            height: 56.s))),
                 SizedBox(width: 16.w),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 400),
                     child: Column(
-                      key: ValueKey(currentMusic.id),
-                      mainAxisAlignment: MainAxisAlignment.center, 
-                      crossAxisAlignment: CrossAxisAlignment.start, 
-                      children: [
-                        Text(currentMusic.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(currentMusic.artist, style: TextStyle(fontSize: 12.sp, color: theme.colorScheme.onSurface.withOpacity(0.5)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ]
-                    ),
+                        key: ValueKey(currentMusic.id),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(currentMusic.title,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text(currentMusic.artist,
+                              style: TextStyle(
+                                  fontSize: 12.sp,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.5)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ]),
                   ),
                 ),
                 IconButton(
-                  icon: ValueListenableBuilder<bool>(valueListenable: musicService.playingNotifier, builder: (_, isPlaying, __) => Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: settings.accentColor)),
+                  icon: ValueListenableBuilder<bool>(
+                      valueListenable: musicService.playingNotifier,
+                      builder: (_, isPlaying, __) => Icon(
+                          isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: settings.accentColor)),
                   onPressed: musicService.togglePlayPause,
                 ),
-                IconButton(icon: const Icon(Icons.skip_next_rounded), onPressed: musicService.next),
+                IconButton(
+                    icon: const Icon(Icons.skip_next_rounded),
+                    onPressed: musicService.next),
               ],
             ),
           ),

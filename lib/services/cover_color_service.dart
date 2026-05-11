@@ -43,6 +43,26 @@ class CoverColorService {
       return fallback;
     }
 
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      try {
+        final palette = await PaletteGenerator.fromImageProvider(
+          NetworkImage(path),
+          maximumColorCount: 12,
+          size: const Size(160, 160),
+        );
+        final dominant = palette.dominantColor?.color ??
+            palette.vibrantColor?.color ??
+            palette.mutedColor?.color ??
+            Colors.teal;
+        final accent = palette.vibrantColor?.color ??
+            palette.lightVibrantColor?.color ??
+            _shiftLightness(dominant, 0.18);
+        return _fromColor(dominant, accent: accent);
+      } catch (_) {
+        return fallback;
+      }
+    }
+
     final file = File(path);
     if (!file.existsSync()) {
       return fallback;

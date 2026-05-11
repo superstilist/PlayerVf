@@ -42,20 +42,26 @@ class AudioEffectsMenu extends StatelessWidget {
                         children: [
                           Text(
                             'Audio Effects',
-                            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold),
                           ),
                           SizedBox(height: 4),
                           Text(
                             'Desktop-optimized equalizer and playback tuning',
-                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                            style:
+                                TextStyle(color: Colors.white54, fontSize: 12),
                           ),
                         ],
                       ),
                     ),
                     TextButton.icon(
                       onPressed: service.resetAudioEffects,
-                      icon: const Icon(Icons.restart_alt_rounded, color: Colors.tealAccent),
-                      label: const Text('Reset All', style: TextStyle(color: Colors.tealAccent)),
+                      icon: const Icon(Icons.restart_alt_rounded,
+                          color: Colors.tealAccent),
+                      label: const Text('Reset All',
+                          style: TextStyle(color: Colors.tealAccent)),
                     ),
                     const SizedBox(width: 8),
                     Switch(
@@ -95,13 +101,17 @@ class AudioEffectsMenu extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: CheckboxListTile(
-                        title: const Text('Save for this song only', style: TextStyle(color: Colors.white)),
+                        title: const Text('Save for this song only',
+                            style: TextStyle(color: Colors.white)),
                         subtitle: const Text(
                           'Keep a separate effect profile for the current track.',
                           style: TextStyle(color: Colors.white54),
                         ),
                         value: service.useSongSpecificSettings,
-                        onChanged: service.isEffectsEnabled ? (value) => service.setUseSongSpecificSettings(value ?? false) : null,
+                        onChanged: service.isEffectsEnabled
+                            ? (value) => service
+                                .setUseSongSpecificSettings(value ?? false)
+                            : null,
                         activeColor: Colors.teal,
                         checkColor: Colors.black,
                         contentPadding: EdgeInsets.zero,
@@ -122,7 +132,8 @@ class AudioEffectsMenu extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Playback Controls', subtitle: 'Smooth tuning for speed, pitch, and space'),
+          _buildSectionHeader('Playback Controls',
+              subtitle: 'Smooth tuning for speed, pitch, and space'),
           const SizedBox(height: 14),
           _buildSlider(
             context,
@@ -141,7 +152,9 @@ class AudioEffectsMenu extends StatelessWidget {
             min: 0.5,
             max: 2.0,
             onChanged: service.setPitch,
-            displayValue: service.supportsPitchControl ? '${service.pitch.toStringAsFixed(2)}x' : 'Unavailable on this device',
+            displayValue: service.supportsPitchControl
+                ? '${service.pitch.toStringAsFixed(2)}x'
+                : 'Unavailable on this device',
             enabledOverride: service.supportsPitchControl,
           ),
           const SizedBox(height: 10),
@@ -152,7 +165,9 @@ class AudioEffectsMenu extends StatelessWidget {
             min: 0.0,
             max: 1.0,
             onChanged: service.setReverb,
-            displayValue: service.reverb > 0.8 ? 'Large Hall' : '${(service.reverb * 100).toInt()}%',
+            displayValue: service.reverb > 0.8
+                ? 'Large Hall'
+                : '${(service.reverb * 100).toInt()}%',
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -177,7 +192,8 @@ class AudioEffectsMenu extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Quick Tone Profiles', subtitle: 'One-click sound shaping'),
+          _buildSectionHeader('Quick Tone Profiles',
+              subtitle: 'One-click sound shaping'),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
@@ -212,19 +228,6 @@ class AudioEffectsMenu extends StatelessWidget {
               }),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: const Text(
-              'Desktop tip: use the mouse wheel over horizontal sliders for finer adjustments if your OS sends scroll focus to the active control.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ),
         ],
       ),
     );
@@ -244,16 +247,23 @@ class AudioEffectsMenu extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _buildSectionHeader('Equalizer', subtitle: isDesktop ? 'Horizontal bands tuned for mouse control' : 'Frequency shaping'),
+                child: _buildSectionHeader('Equalizer',
+                    subtitle: isDesktop
+                        ? 'Horizontal bands tuned for mouse control'
+                        : 'Frequency shaping'),
               ),
               TextButton.icon(
                 onPressed: service.resetEqualizer,
-                icon: const Icon(Icons.refresh_rounded, color: Colors.tealAccent, size: 18),
-                label: const Text('Reset EQ', style: TextStyle(color: Colors.tealAccent)),
+                icon: const Icon(Icons.refresh_rounded,
+                    color: Colors.tealAccent, size: 18),
+                label: const Text('Reset EQ',
+                    style: TextStyle(color: Colors.tealAccent)),
               ),
               Switch(
                 value: service.isEqualizerEnabled,
-                onChanged: service.isEffectsEnabled ? service.setEqualizerEnabled : null,
+                onChanged: service.isEffectsEnabled
+                    ? service.setEqualizerEnabled
+                    : null,
                 activeColor: Colors.tealAccent,
               ),
             ],
@@ -267,11 +277,18 @@ class AudioEffectsMenu extends StatelessWidget {
               return ChoiceChip(
                 label: Text(preset),
                 selected: isSelected,
-                onSelected: service.isEffectsEnabled && service.isEqualizerEnabled ? (_) => service.setEqualizerPreset(preset) : null,
+                onSelected:
+                    service.isEffectsEnabled && service.isEqualizerEnabled
+                        ? (_) => service.setEqualizerPreset(preset)
+                        : null,
                 backgroundColor: Colors.white.withOpacity(0.05),
                 selectedColor: Colors.teal.withOpacity(0.24),
-                labelStyle: TextStyle(color: isSelected ? Colors.tealAccent : Colors.white70),
-                side: BorderSide(color: isSelected ? Colors.tealAccent.withOpacity(0.4) : Colors.white12),
+                labelStyle: TextStyle(
+                    color: isSelected ? Colors.tealAccent : Colors.white70),
+                side: BorderSide(
+                    color: isSelected
+                        ? Colors.tealAccent.withOpacity(0.4)
+                        : Colors.white12),
               );
             }).toList(),
           ),
@@ -285,7 +302,8 @@ class AudioEffectsMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildDesktopEqBands(BuildContext context, MusicService service, List<int> freqs) {
+  Widget _buildDesktopEqBands(
+      BuildContext context, MusicService service, List<int> freqs) {
     return Column(
       children: List.generate(freqs.length, (index) {
         final freq = freqs[index];
@@ -308,15 +326,20 @@ class AudioEffectsMenu extends StatelessWidget {
                   width: 72,
                   child: Text(
                     label,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
                   ),
                 ),
                 Expanded(
                   child: SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 15),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 15),
                       activeTrackColor: Colors.teal,
                       inactiveTrackColor: Colors.grey[800],
                       thumbColor: Colors.tealAccent,
@@ -328,7 +351,9 @@ class AudioEffectsMenu extends StatelessWidget {
                       max: 10,
                       divisions: 40,
                       label: '${value.toStringAsFixed(1)} dB',
-                      onChanged: enabled ? (v) => service.setEqualizerBand(index, v) : null,
+                      onChanged: enabled
+                          ? (v) => service.setEqualizerBand(index, v)
+                          : null,
                     ),
                   ),
                 ),
@@ -352,7 +377,8 @@ class AudioEffectsMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileEqBands(BuildContext context, MusicService service, List<int> freqs) {
+  Widget _buildMobileEqBands(
+      BuildContext context, MusicService service, List<int> freqs) {
     return SizedBox(
       height: 220,
       child: ListView.separated(
@@ -372,8 +398,10 @@ class AudioEffectsMenu extends StatelessWidget {
                   child: SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 14),
                       activeTrackColor: Colors.teal,
                       inactiveTrackColor: Colors.grey[800],
                       thumbColor: Colors.tealAccent,
@@ -383,7 +411,8 @@ class AudioEffectsMenu extends StatelessWidget {
                       value: value,
                       min: -10,
                       max: 10,
-                      onChanged: (service.isEffectsEnabled && service.isEqualizerEnabled)
+                      onChanged: (service.isEffectsEnabled &&
+                              service.isEqualizerEnabled)
                           ? (v) => service.setEqualizerBand(index, v)
                           : null,
                     ),
@@ -391,8 +420,10 @@ class AudioEffectsMenu extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
-              Text('${value.toStringAsFixed(1)}dB', style: const TextStyle(color: Colors.teal, fontSize: 9)),
+              Text(label,
+                  style: const TextStyle(color: Colors.white54, fontSize: 10)),
+              Text('${value.toStringAsFixed(1)}dB',
+                  style: const TextStyle(color: Colors.teal, fontSize: 9)),
             ],
           );
         },
@@ -406,7 +437,11 @@ class AudioEffectsMenu extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.4),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
@@ -450,7 +485,11 @@ class AudioEffectsMenu extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
             Text(
               displayValue,
               style: TextStyle(
@@ -496,7 +535,8 @@ class AudioEffectsMenu extends StatelessWidget {
     );
   }
 
-  Widget _toneButton(String label, MusicService service, VoidCallback onPressed) {
+  Widget _toneButton(
+      String label, MusicService service, VoidCallback onPressed) {
     return ElevatedButton(
       onPressed: service.isEffectsEnabled ? onPressed : null,
       style: ElevatedButton.styleFrom(

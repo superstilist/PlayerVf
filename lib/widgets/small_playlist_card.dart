@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import '../models/playlist_model.dart';
 import '../services/music_service.dart';
 import '../services/responsive.dart';
+import 'cover_art_texture.dart';
 import 'glass_container.dart';
 
 class SmallPlaylistCard extends StatelessWidget {
@@ -42,13 +42,13 @@ class SmallPlaylistCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.s),
                 child: musicList.isNotEmpty && musicList[0].coverPath.isNotEmpty
-                  ? Image.file(
-                      File(musicList[0].coverPath),
-                      fit: BoxFit.cover,
-                      cacheWidth: 100,
-                      cacheHeight: 100,
-                    )
-                  : Icon(_getPlaylistIcon(playlist.id), color: _getPlaylistColor(playlist.id), size: 24.s),
+                    ? CoverArtTexture(
+                        coverArtPath: musicList[0].coverPath,
+                        width: double.infinity,
+                        height: double.infinity,
+                      )
+                    : Icon(_getPlaylistIcon(playlist.id),
+                        color: _getPlaylistColor(playlist.id), size: 24.s),
               ),
             ),
             SizedBox(width: 16.w),
@@ -58,7 +58,10 @@ class SmallPlaylistCard extends StatelessWidget {
                 children: [
                   Text(
                     playlist.name,
-                    style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 4.h),
                   Text(
@@ -71,12 +74,14 @@ class SmallPlaylistCard extends StatelessWidget {
             if (onDelete != null)
               IconButton(
                 iconSize: 20.s,
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.grey),
+                icon: const Icon(Icons.delete_outline_rounded,
+                    color: Colors.grey),
                 onPressed: onDelete,
               ),
             IconButton(
               iconSize: 30.s,
-              icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.teal),
+              icon: const Icon(Icons.play_circle_fill_rounded,
+                  color: Colors.teal),
               onPressed: () => musicService.playPlaylist(playlist.id),
             ),
           ],
@@ -87,21 +92,31 @@ class SmallPlaylistCard extends StatelessWidget {
 
   IconData _getPlaylistIcon(String id) {
     switch (id) {
-      case 'favorites': return Icons.favorite_rounded;
-      case 'most_listened': return Icons.trending_up_rounded;
-      case 'early_listened': return Icons.access_time_rounded;
-      case 'daily_mix': return Icons.auto_awesome_rounded;
-      default: return Icons.playlist_play_rounded;
+      case 'favorites':
+        return Icons.favorite_rounded;
+      case 'most_listened':
+        return Icons.trending_up_rounded;
+      case 'early_listened':
+        return Icons.access_time_rounded;
+      case 'daily_mix':
+        return Icons.auto_awesome_rounded;
+      default:
+        return Icons.playlist_play_rounded;
     }
   }
 
   Color _getPlaylistColor(String id) {
     switch (id) {
-      case 'favorites': return Colors.redAccent;
-      case 'most_listened': return Colors.purpleAccent;
-      case 'early_listened': return Colors.blueAccent;
-      case 'daily_mix': return Colors.tealAccent;
-      default: return Colors.white54;
+      case 'favorites':
+        return Colors.redAccent;
+      case 'most_listened':
+        return Colors.purpleAccent;
+      case 'early_listened':
+        return Colors.blueAccent;
+      case 'daily_mix':
+        return Colors.tealAccent;
+      default:
+        return Colors.white54;
     }
   }
 }

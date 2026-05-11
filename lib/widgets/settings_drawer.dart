@@ -22,11 +22,11 @@ class SettingsDrawer extends StatelessWidget {
       color: Colors.transparent,
       child: GlassContainer(
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(32),
-          bottomLeft: Radius.circular(32),
+          topLeft: Radius.circular(24),
+          bottomLeft: Radius.circular(24),
         ),
-        blur: 20,
-        color: theme.colorScheme.surface.withOpacity(0.7),
+        blur: 24,
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.70),
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,7 +38,8 @@ class SettingsDrawer extends StatelessWidget {
                   children: [
                     const Text(
                       'Settings',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded),
@@ -53,9 +54,9 @@ class SettingsDrawer extends StatelessWidget {
                   children: [
                     _buildSectionTitle('Audio'),
                     _buildListTile(
+                      context: context,
                       icon: Icons.equalizer_rounded,
                       title: 'Audio Effects',
-                      subtitle: 'EQ, Pitch, Reverb',
                       onTap: () {
                         Navigator.pop(context);
                         showAudioEffectsMenu(context);
@@ -64,28 +65,31 @@ class SettingsDrawer extends StatelessWidget {
                     const SizedBox(height: 24),
                     _buildSectionTitle('Interface'),
                     _buildListTile(
+                      context: context,
                       icon: Icons.palette_rounded,
                       title: 'Appearance',
-                      subtitle: 'Theme, Layout, Colors',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const AppearanceScreen()),
+                          MaterialPageRoute(
+                              builder: (_) => const AppearanceScreen()),
                         );
                       },
                     ),
                     const SizedBox(height: 24),
                     _buildSectionTitle('Playback'),
                     SwitchListTile(
-                      title: const Text('Remember playback', style: TextStyle(fontSize: 14)),
+                      title: const Text('Remember playback',
+                          style: TextStyle(fontSize: 14)),
                       value: musicService.rememberPlayback,
                       activeColor: settings.accentColor,
                       onChanged: (v) => musicService.setRememberPlayback(v),
                     ),
                     const SizedBox(height: 24),
                     _buildSectionTitle('Library'),
-                    ...settings.musicSourcePaths.map((path) => _buildPathTile(context, settings, path)),
+                    ...settings.musicSourcePaths
+                        .map((path) => _buildPathTile(context, settings, path)),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: () => _addPath(context, settings),
@@ -94,24 +98,39 @@ class SettingsDrawer extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: settings.accentColor,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionTitle('YouTube Music'),
+                    _buildListTile(
+                      context: context,
+                      icon: Icons.download_rounded,
+                      title: 'Download Folder',
+                      subtitle: settings.youtubeMusicDownloadPath.isEmpty
+                          ? 'Using default folder'
+                          : settings.youtubeMusicDownloadPath,
+                      onTap: () => _setYoutubeDownloadPath(
+                          context, settings, musicService),
                     ),
                     const SizedBox(height: 24),
                     _buildSectionTitle('System'),
                     _buildListTile(
+                      context: context,
                       icon: Icons.refresh_rounded,
                       title: 'Update Library',
-                      subtitle: 'Rescan music folders',
                       onTap: () => musicService.loadSystemMusic(
-                        customPaths: settings.musicSourcePaths.isEmpty ? null : settings.musicSourcePaths,
+                        customPaths: settings.musicSourcePaths.isEmpty
+                            ? null
+                            : settings.musicSourcePaths,
                         clearExisting: true,
                       ),
                     ),
                     _buildListTile(
+                      context: context,
                       icon: Icons.delete_sweep_rounded,
                       title: 'Clear Cache',
-                      subtitle: 'Delete artwork cache',
                       onTap: () => musicService.clearCache(),
                     ),
                     const SizedBox(height: 40),
@@ -129,39 +148,47 @@ class SettingsDrawer extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 16, bottom: 12),
       child: Text(
-        title.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.teal,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-          letterSpacing: 1.5,
+        title,
+        style: TextStyle(
+          color: Colors.teal.shade300,
+          fontWeight: FontWeight.w800,
+          fontSize: 13,
         ),
       ),
     );
   }
 
   Widget _buildListTile({
+    required BuildContext context,
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     return ListTile(
-      leading: Icon(icon, color: Colors.teal),
-      title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      leading: Icon(icon, color: theme.colorScheme.primary),
+      title: Text(title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: const TextStyle(fontSize: 12)),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 
-  Widget _buildPathTile(BuildContext context, SettingsModel settings, String path) {
+  Widget _buildPathTile(
+      BuildContext context, SettingsModel settings, String path) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withOpacity(0.42),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -175,7 +202,8 @@ class SettingsDrawer extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.remove_circle_outline_rounded, size: 16, color: Colors.redAccent),
+            icon: const Icon(Icons.remove_circle_outline_rounded,
+                size: 16, color: Colors.redAccent),
             onPressed: () => settings.removeMusicPath(path),
           ),
         ],
@@ -186,5 +214,17 @@ class SettingsDrawer extends StatelessWidget {
   Future<void> _addPath(BuildContext context, SettingsModel settings) async {
     final path = await FilePicker.platform.getDirectoryPath();
     if (path != null) settings.addMusicPath(path);
+  }
+
+  Future<void> _setYoutubeDownloadPath(
+    BuildContext context,
+    SettingsModel settings,
+    MusicService musicService,
+  ) async {
+    final path = await FilePicker.platform.getDirectoryPath();
+    if (path == null || path.isEmpty) return;
+    await settings.setYoutubeMusicDownloadPath(path);
+    await musicService.loadSystemMusic(
+        customPaths: settings.musicSourcePaths, clearExisting: true);
   }
 }

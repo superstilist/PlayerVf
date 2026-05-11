@@ -10,6 +10,7 @@ import 'package:on_audio_query/on_audio_query.dart';
 import '../models/music_model.dart';
 import '../models/settings_model.dart';
 import 'id3_parser.dart';
+import 'youtube_music_service.dart';
 
 /// Music scanner service that handles scanning music folders
 /// across different platforms (PC/Desktop and Mobile) with optimized performance
@@ -111,14 +112,13 @@ class MusicScannerService {
 
       final stat = await file.stat();
       final cached = result.first;
-      
+
       final cachedModified = cached['last_modified'] as int;
       final cachedSize = cached['file_size'] as int;
 
       if (stat.modified.millisecondsSinceEpoch == cachedModified &&
           stat.size == cachedSize &&
           cached['title'] != null) {
-        
         return Music(
           id: p.basenameWithoutExtension(file.path),
           title: cached['title'] as String,
@@ -140,7 +140,7 @@ class MusicScannerService {
     try {
       final db = await _initializeCacheDb();
       final stat = await file.stat();
-      
+
       await db.insert(
         'file_cache',
         {
@@ -201,25 +201,36 @@ class MusicScannerService {
     final stopwatch = Stopwatch()..start();
     final Set<String> musicPathsSet = <String>{};
 
-    // Scan user-defined paths from settings OR customPaths
-    if (customPaths != null && customPaths.isNotEmpty) {
-       final futures = <Future<List<String>>>[];
-       for (final path in customPaths) {
-         onProgress?.call(path);
-         final dir = Directory(path);
-         futures.add(_scanDirectoryIfExists(dir));
-       }
-       final results = await Future.wait(futures);
-       for (final list in results) {
-         musicPathsSet.addAll(list);
-       }
-    } else {
-      final settings = SettingsModel();
-      await settings.loadSettings();
+    final settings = SettingsModel();
+    await settings.loadSettings();
+    final youtubeDownloadPath = settings.youtubeMusicDownloadPath.isNotEmpty
+        ? settings.youtubeMusicDownloadPath
+        : await YoutubeMusicService.defaultYoutubeMusicDownloadDirectory();
 
-      if (settings.musicSourcePaths.isNotEmpty) {
+    // Scan user-defined paths from settings OR customPaths.
+    // Always include the YouTube Music download folder so downloaded files show up after refresh.
+    if (customPaths != null && customPaths.isNotEmpty) {
+      final futures = <Future<List<String>>>[];
+      final pathsToScan = <String>{...customPaths, youtubeDownloadPath}
+          .where((path) => path.trim().isNotEmpty);
+      for (final path in pathsToScan) {
+        onProgress?.call(path);
+        final dir = Directory(path);
+        futures.add(_scanDirectoryIfExists(dir));
+      }
+      final results = await Future.wait(futures);
+      for (final list in results) {
+        musicPathsSet.addAll(list);
+      }
+    } else {
+      final pathsToScan = <String>{
+        ...settings.musicSourcePaths,
+        youtubeDownloadPath
+      }.where((path) => path.trim().isNotEmpty).toList();
+
+      if (pathsToScan.isNotEmpty) {
         final futures = <Future<List<String>>>[];
-        for (final path in settings.musicSourcePaths) {
+        for (final path in pathsToScan) {
           onProgress?.call(path);
           final dir = Directory(path);
           futures.add(_scanDirectoryIfExists(dir));
@@ -234,10 +245,12 @@ class MusicScannerService {
 
     if (musicPathsSet.isEmpty) {
       if (Platform.isAndroid) {
-        final results = await _scanAndroidMusicWithMediaStore(onProgress: onProgress);
+        final results =
+            await _scanAndroidMusicWithMediaStore(onProgress: onProgress);
         musicPathsSet.addAll(results);
         if (musicPathsSet.isEmpty) {
-          final fallbackResults = await _scanAndroidMusicFallback(onProgress: onProgress);
+          final fallbackResults =
+              await _scanAndroidMusicFallback(onProgress: onProgress);
           musicPathsSet.addAll(fallbackResults);
         }
       } else if (Platform.isIOS) {
@@ -260,7 +273,8 @@ class MusicScannerService {
     return musicPaths;
   }
 
-  static Future<List<String>> _scanAndroidMusicWithMediaStore({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanAndroidMusicWithMediaStore(
+      {Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
     final permissionsGranted = await checkPermissions();
     if (!permissionsGranted) return [];
@@ -281,7 +295,8 @@ class MusicScannerService {
     return musicPathsSet.toList();
   }
 
-  static Future<List<String>> _scanAndroidMusicFallback({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanAndroidMusicFallback(
+      {Function(String)? onProgress}) async {
     final Set<String> musicPathsSet = <String>{};
     final permissionsGranted = await checkPermissions();
     if (!permissionsGranted) return [];
@@ -309,13 +324,15 @@ class MusicScannerService {
     return await Permission.storage.request().isGranted;
   }
 
-  static Future<List<String>> _scanIOSMusicFolders({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanIOSMusicFolders(
+      {Function(String)? onProgress}) async {
     final docDir = await getApplicationDocumentsDirectory();
     onProgress?.call(docDir.path);
     return await _scanDirectoryIfExists(Directory(docDir.path));
   }
 
-  static Future<List<String>> _scanWindowsMusicFolders({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanWindowsMusicFolders(
+      {Function(String)? onProgress}) async {
     final userDir = Platform.environment['USERPROFILE'] ?? '';
     final dirsToScan = [
       p.join(userDir, 'Music'),
@@ -331,9 +348,14 @@ class MusicScannerService {
     return results.expand((x) => x).toList();
   }
 
-  static Future<List<String>> _scanMacOSMusicFolders({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanMacOSMusicFolders(
+      {Function(String)? onProgress}) async {
     final homeDir = Platform.environment['HOME'] ?? '';
-    final dirsToScan = [p.join(homeDir, 'Music'), p.join(homeDir, 'Downloads'), p.join(homeDir, 'Desktop')];
+    final dirsToScan = [
+      p.join(homeDir, 'Music'),
+      p.join(homeDir, 'Downloads'),
+      p.join(homeDir, 'Desktop')
+    ];
     final futures = dirsToScan.map((d) {
       onProgress?.call(d);
       return _scanDirectoryIfExists(Directory(d));
@@ -342,9 +364,14 @@ class MusicScannerService {
     return results.expand((x) => x).toList();
   }
 
-  static Future<List<String>> _scanLinuxMusicFolders({Function(String)? onProgress}) async {
+  static Future<List<String>> _scanLinuxMusicFolders(
+      {Function(String)? onProgress}) async {
     final homeDir = Platform.environment['HOME'] ?? '';
-    final dirsToScan = [p.join(homeDir, 'Music'), p.join(homeDir, 'Downloads'), p.join(homeDir, 'Desktop')];
+    final dirsToScan = [
+      p.join(homeDir, 'Music'),
+      p.join(homeDir, 'Downloads'),
+      p.join(homeDir, 'Desktop')
+    ];
     final futures = dirsToScan.map((d) {
       onProgress?.call(d);
       return _scanDirectoryIfExists(Directory(d));
@@ -378,7 +405,7 @@ class MusicScannerService {
     final stopwatch = Stopwatch()..start();
     final parser = ID3Parser();
     final List<Music> results = [];
-    
+
     // Get persistent directory for covers
     final appDocDir = await getApplicationDocumentsDirectory();
     final coversDir = p.join(appDocDir.path, 'covers');
@@ -395,21 +422,26 @@ class MusicScannerService {
         if (cached != null) {
           // Verify if cover still exists if path is not empty
           if (cached.coverPath.isNotEmpty) {
-            if (await File(cached.coverPath).exists()) {
+            final cachedCover = File(cached.coverPath);
+            final isNativeCoverCache =
+                p.basename(cached.coverPath).contains('_cover_native');
+            if (isNativeCoverCache && await cachedCover.exists()) {
               return cached;
             }
             // If cover is missing, re-parse to extract it
           } else {
-             return cached;
+            return cached;
           }
         }
 
         final tags = await Future.any([
           parser.parseTagsFromFile(path),
-          Future.delayed(Duration(milliseconds: _metadataTimeout), () => <String, dynamic>{}),
+          Future.delayed(Duration(milliseconds: _metadataTimeout),
+              () => <String, dynamic>{}),
         ]);
 
-        final music = parser.createMusicFromTags(path, tags, coverDirectory: coversDir);
+        final music =
+            parser.createMusicFromTags(path, tags, coverDirectory: coversDir);
         await cacheMusic(music, file);
         return music;
       } catch (e) {
@@ -422,14 +454,18 @@ class MusicScannerService {
 
     for (int i = 0; i < paths.length; i += _maxParallelWorkers) {
       if (_scanOperation?.isCanceled ?? false) break;
-      final end = (i + _maxParallelWorkers > paths.length) ? paths.length : i + _maxParallelWorkers;
+      final end = (i + _maxParallelWorkers > paths.length)
+          ? paths.length
+          : i + _maxParallelWorkers;
       final sub = paths.sublist(i, end);
-      final currentBatchResults = await Future.wait(sub.map((p) => processPath(p)));
+      final currentBatchResults =
+          await Future.wait(sub.map((p) => processPath(p)));
       final validResults = currentBatchResults.whereType<Music>().toList();
       batchResults.addAll(validResults);
       results.addAll(validResults);
 
-      if (DateTime.now().difference(lastUpdateTime).inMilliseconds >= _batchUpdateInterval) {
+      if (DateTime.now().difference(lastUpdateTime).inMilliseconds >=
+          _batchUpdateInterval) {
         lastUpdateTime = DateTime.now();
         onBatchUpdate?.call(List.from(batchResults));
         batchResults.clear();
@@ -449,9 +485,11 @@ class MusicScannerService {
   }) async {
     await cancelScanning();
     _scanOperation = CancelableOperation.fromFuture(
-          () async {
-        final paths = await scanSystemMusicFolders(onProgress: onProgress, customPaths: customPaths);
-        return await createMusicListFromPaths(paths, onBatchUpdate: onBatchUpdate);
+      () async {
+        final paths = await scanSystemMusicFolders(
+            onProgress: onProgress, customPaths: customPaths);
+        return await createMusicListFromPaths(paths,
+            onBatchUpdate: onBatchUpdate);
       }(),
     );
     try {
@@ -475,7 +513,7 @@ class MusicScannerService {
     try {
       final db = await _initializeCacheDb();
       await db.delete('file_cache');
-      
+
       final appDocDir = await getApplicationDocumentsDirectory();
       final coversDir = Directory(p.join(appDocDir.path, 'covers'));
       if (await coversDir.exists()) {

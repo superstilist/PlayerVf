@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:id3/id3.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:image/image.dart' as img;
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 
@@ -23,7 +22,8 @@ class ID3Parser {
 
     // Check if we already parsed this file
     if (_tagCache.containsKey(filePath)) {
-      return Map.from(_tagCache[filePath]!); // Return copy to prevent modification
+      return Map.from(
+          _tagCache[filePath]!); // Return copy to prevent modification
     }
 
     try {
@@ -63,6 +63,13 @@ class ID3Parser {
       if (metadataExtensions.contains(extension)) {
         try {
           result = await _parseWithMediaMetadata(file);
+          if ((extension == '.m4a' ||
+                  extension == '.mp4' ||
+                  extension == '.m4b') &&
+              !result.containsKey('cover')) {
+            final bytes = await file.readAsBytes();
+            result.addAll(_parseMp4Cover(bytes));
+          }
           if (result.isNotEmpty) {
             _tagCache[filePath] = result;
             return result;
@@ -75,7 +82,8 @@ class ID3Parser {
       // 2) MP3 via id3 package (ID3v2)
       if (extension == '.mp3') {
         try {
-          final bytes = await file.readAsBytes(); // MP3 parsing generally needs full bytes
+          final bytes = await file
+              .readAsBytes(); // MP3 parsing generally needs full bytes
           final mp3Res = _parseMp3Tags(bytes);
           if (mp3Res.isNotEmpty) {
             _tagCache[filePath] = mp3Res;
@@ -90,6 +98,20 @@ class ID3Parser {
           }
         } catch (e) {
           if (kDebugMode) print('MP3 parsing failed: $e');
+        }
+      }
+
+      // 3) Manual MP4/M4A cover fallback when platform metadata misses covr.
+      if (extension == '.m4a' || extension == '.mp4' || extension == '.m4b') {
+        try {
+          final bytes = await file.readAsBytes();
+          final mp4Res = _parseMp4Cover(bytes);
+          if (mp4Res.isNotEmpty) {
+            _tagCache[filePath] = mp4Res;
+            return mp4Res;
+          }
+        } catch (e) {
+          if (kDebugMode) print('MP4 cover parse error: $e');
         }
       }
 
@@ -217,7 +239,8 @@ class ID3Parser {
     try {
       final len = await file.length();
       if (len == 0) return {};
-      final tailSize = len < 16 * 1024 ? len : 16 * 1024; // read up to last 16KB
+      final tailSize =
+          len < 16 * 1024 ? len : 16 * 1024; // read up to last 16KB
       final raf = await file.open();
       await raf.setPosition(len - tailSize);
       final tailBytesList = await raf.read(tailSize);
@@ -261,7 +284,8 @@ class ID3Parser {
         int keyEnd = keyStart;
         while (keyEnd < block.length && block[keyEnd] != 0) keyEnd++;
         if (keyEnd >= block.length) break;
-        final key = _decodeString(block.sublist(keyStart, keyEnd)).toLowerCase();
+        final key =
+            _decodeString(block.sublist(keyStart, keyEnd)).toLowerCase();
         pos = keyEnd + 1;
         // value
         if (pos + vlen > block.length) break;
@@ -271,8 +295,10 @@ class ID3Parser {
 
         if (key == 'title' && value.isNotEmpty) result['title'] = value;
         if (key == 'artist' && value.isNotEmpty) result['artist'] = value;
-        if ((key == 'album' || key == 'albumtitle') && value.isNotEmpty) result['album'] = value;
-        if ((key == 'year' || key == 'date') && value.isNotEmpty) result['year'] = value;
+        if ((key == 'album' || key == 'albumtitle') && value.isNotEmpty)
+          result['album'] = value;
+        if ((key == 'year' || key == 'date') && value.isNotEmpty)
+          result['year'] = value;
         if ((key == 'genre') && value.isNotEmpty) result['genre'] = value;
 
         if (key.contains('cover') || key.contains('art')) {
@@ -308,6 +334,92 @@ class ID3Parser {
     return -1;
   }
 
+  Map<String, dynamic> _parseMp4Cover(Uint8List bytes) {
+    final result = <String, dynamic>{};
+    try {
+      final covr = utf8.encode('covr');
+      int searchFrom = 0;
+      while (searchFrom < bytes.length) {
+        final typeIndex = _indexOfFrom(bytes, covr, searchFrom);
+        if (typeIndex < 4) return result;
+
+        final covrStart = typeIndex - 4;
+        final covrSize = _readBe32(bytes, covrStart);
+        final covrEnd = covrStart + covrSize;
+        if (covrSize < 16 || covrEnd > bytes.length) {
+          searchFrom = typeIndex + 4;
+          continue;
+        }
+
+        int child = typeIndex + 4;
+        while (child + 16 <= covrEnd) {
+          final childSize = _readBe32(bytes, child);
+          if (childSize < 16 || child + childSize > covrEnd) break;
+
+          if (_asciiEquals(bytes, child + 4, 'data')) {
+            final payloadStart = child + 16;
+            final payloadEnd = child + childSize;
+            if (payloadStart < payloadEnd) {
+              final cover = bytes.sublist(payloadStart, payloadEnd);
+              if (_looksLikeImage(cover)) {
+                result['cover'] = cover;
+                return result;
+              }
+            }
+          }
+          child += childSize;
+        }
+
+        searchFrom = typeIndex + 4;
+      }
+    } catch (e) {
+      if (kDebugMode) print('MP4 covr parse exception: $e');
+    }
+    return result;
+  }
+
+  int _indexOfFrom(Uint8List data, List<int> pattern, int start) {
+    if (pattern.isEmpty || data.length < pattern.length) return -1;
+    final int limit = data.length - pattern.length;
+    for (int i = start; i <= limit; i++) {
+      bool ok = true;
+      for (int j = 0; j < pattern.length; j++) {
+        if (data[i + j] != pattern[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return i;
+    }
+    return -1;
+  }
+
+  int _readBe32(Uint8List bytes, int offset) {
+    if (offset < 0 || offset + 4 > bytes.length) return 0;
+    return (bytes[offset] << 24) |
+        (bytes[offset + 1] << 16) |
+        (bytes[offset + 2] << 8) |
+        bytes[offset + 3];
+  }
+
+  bool _asciiEquals(Uint8List bytes, int offset, String text) {
+    if (offset < 0 || offset + text.length > bytes.length) return false;
+    for (int i = 0; i < text.length; i++) {
+      if (bytes[offset + i] != text.codeUnitAt(i)) return false;
+    }
+    return true;
+  }
+
+  bool _looksLikeImage(Uint8List bytes) {
+    if (bytes.length < 8) return false;
+    final isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8;
+    final isPng = bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47;
+    return isJpeg || isPng;
+  }
+
   // ----------------------------
   // FLAC block parser: Vorbis comment (type 4) + PICTURE (type 6)
   Map<String, dynamic> _parseFlacBlocks(Uint8List bytes) {
@@ -315,7 +427,10 @@ class ID3Parser {
     try {
       // bytes start with 'fLaC'
       if (bytes.length < 8) return {};
-      if (!(bytes[0] == 0x66 && bytes[1] == 0x4C && bytes[2] == 0x61 && bytes[3] == 0x43)) {
+      if (!(bytes[0] == 0x66 &&
+          bytes[1] == 0x4C &&
+          bytes[2] == 0x61 &&
+          bytes[3] == 0x43)) {
         return {};
       }
       int pos = 4;
@@ -326,7 +441,8 @@ class ID3Parser {
         final type = headerByte & 0x7f;
         // 24-bit length big-endian
         if (pos + 3 >= bytes.length) break;
-        final len = (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+        final len =
+            (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
         pos += 4;
         if (len < 0 || pos + len > bytes.length) break;
         final block = bytes.sublist(pos, pos + len);
@@ -337,9 +453,9 @@ class ID3Parser {
           int readLe32() {
             if (off + 4 > block.length) return 0;
             final v = block[off] |
-            (block[off + 1] << 8) |
-            (block[off + 2] << 16) |
-            (block[off + 3] << 24);
+                (block[off + 1] << 8) |
+                (block[off + 2] << 16) |
+                (block[off + 3] << 24);
             off += 4;
             return v;
           }
@@ -354,12 +470,13 @@ class ID3Parser {
               for (int i = 0; i < userCount; i++) {
                 if (off + 4 > block.length) break;
                 final clen = (block[off]) |
-                (block[off + 1] << 8) |
-                (block[off + 2] << 16) |
-                (block[off + 3] << 24);
+                    (block[off + 1] << 8) |
+                    (block[off + 2] << 16) |
+                    (block[off + 3] << 24);
                 off += 4;
                 if (clen < 0 || off + clen > block.length) break;
-                final comment = _decodeString(block.sublist(off, off + clen), allowMalformed: true);
+                final comment = _decodeString(block.sublist(off, off + clen),
+                    allowMalformed: true);
                 off += clen;
                 final idxEq = comment.indexOf('=');
                 if (idxEq > 0) {
@@ -395,9 +512,9 @@ class ID3Parser {
           int readBe32() {
             if (off + 4 > block.length) return 0;
             final v = (block[off] << 24) |
-            (block[off + 1] << 16) |
-            (block[off + 2] << 8) |
-            (block[off + 3]);
+                (block[off + 1] << 16) |
+                (block[off + 2] << 8) |
+                (block[off + 3]);
             off += 4;
             return v;
           }
@@ -436,22 +553,31 @@ class ID3Parser {
     try {
       final metadata = await MetadataRetriever.fromFile(file);
 
-      if (metadata.trackName != null && metadata.trackName!.isNotEmpty) result['title'] = metadata.trackName;
+      if (metadata.trackName != null && metadata.trackName!.isNotEmpty)
+        result['title'] = metadata.trackName;
       if (metadata.trackArtistNames != null) {
         final artists = metadata.trackArtistNames;
-        if (artists is List) result['artist'] = (artists as List).join(', ');
-        else result['artist'] = artists.toString();
+        if (artists is List)
+          result['artist'] = (artists as List).join(', ');
+        else
+          result['artist'] = artists.toString();
       }
-      if (metadata.albumName != null && metadata.albumName!.isNotEmpty) result['album'] = metadata.albumName;
-      if (metadata.trackNumber != null) result['track'] = metadata.trackNumber.toString();
+      if (metadata.albumName != null && metadata.albumName!.isNotEmpty)
+        result['album'] = metadata.albumName;
+      if (metadata.trackNumber != null)
+        result['track'] = metadata.trackNumber.toString();
       if (metadata.year != null) result['year'] = metadata.year.toString();
-      if (metadata.genre != null && metadata.genre!.isNotEmpty) result['genre'] = metadata.genre;
-      if (metadata.albumArt != null && metadata.albumArt!.isNotEmpty) result['cover'] = metadata.albumArt;
+      if (metadata.genre != null && metadata.genre!.isNotEmpty)
+        result['genre'] = metadata.genre;
+      if (metadata.albumArt != null && metadata.albumArt!.isNotEmpty)
+        result['cover'] = metadata.albumArt;
       if (metadata.mimeType != null) result['mimeType'] = metadata.mimeType;
       if (metadata.bitrate != null) result['bitrate'] = metadata.bitrate;
-      if (metadata.trackDuration != null) result['trackDuration'] = metadata.trackDuration;
+      if (metadata.trackDuration != null)
+        result['trackDuration'] = metadata.trackDuration;
     } catch (e) {
-      if (kDebugMode) print('flutter_media_metadata failed for ${file.path}: $e');
+      if (kDebugMode)
+        print('flutter_media_metadata failed for ${file.path}: $e');
     }
     return result;
   }
@@ -513,7 +639,8 @@ class ID3Parser {
 
   // ----------------------------
   // Create Music model from parsed tags. If cover exists, write to permanent file and set coverPath.
-  Music createMusicFromTags(String filePath, Map<String, dynamic> tags, {String? coverDirectory}) {
+  Music createMusicFromTags(String filePath, Map<String, dynamic> tags,
+      {String? coverDirectory}) {
     final fileName = path.basenameWithoutExtension(filePath);
     String coverPath = '';
 
@@ -526,32 +653,29 @@ class ID3Parser {
         if (coverBytes != null && coverBytes.isNotEmpty) {
           // Use a hash of the file path for the cover filename to ensure it's unique and stable
           final hash = md5.convert(utf8.encode(filePath)).toString();
-          
-          final io.Directory dir = coverDirectory != null 
-              ? io.Directory(coverDirectory) 
+
+          final io.Directory dir = coverDirectory != null
+              ? io.Directory(coverDirectory)
               : io.Directory.systemTemp;
-          
+
           if (!dir.existsSync()) {
             dir.createSync(recursive: true);
           }
-          
-          final coverFile = io.File('${dir.path}/${hash}_cover.png');
+
+          final extension = _coverFileExtension(coverBytes);
+          final coverFile =
+              io.File('${dir.path}/${hash}_cover_native$extension');
           if (!coverFile.existsSync()) {
-            try {
-              final image = img.decodeImage(coverBytes);
-              if (image != null) {
-                // PNG = lossless, best quality for album art
-                final pngBytes = img.encodePng(image, level: 6);
-                coverFile.writeAsBytesSync(pngBytes);
-              } else {
-                coverFile.writeAsBytesSync(coverBytes);
-              }
-            } catch (_) {
-              coverFile.writeAsBytesSync(coverBytes);
-            }
+            coverFile.writeAsBytesSync(coverBytes);
           }
           coverPath = coverFile.path;
           _coverCache[filePath] = coverPath; // Cache the cover path
+        } else {
+          final sidecar = _findSidecarCover(filePath);
+          if (sidecar != null) {
+            coverPath = sidecar.path;
+            _coverCache[filePath] = coverPath;
+          }
         }
       }
     } catch (e) {
@@ -567,6 +691,65 @@ class ID3Parser {
       filePath: filePath,
       coverPath: coverPath,
     );
+  }
+
+  String _coverFileExtension(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return '.png';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+      return '.jpg';
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return '.webp';
+    }
+    return '.img';
+  }
+
+  io.File? _findSidecarCover(String filePath) {
+    final media = io.File(filePath);
+    final dir = media.parent;
+    if (!dir.existsSync()) return null;
+
+    final stem = path.basenameWithoutExtension(filePath).toLowerCase();
+    const imageExtensions = {'.jpg', '.jpeg', '.png', '.webp'};
+    final preferredNames = {
+      '$stem.cover',
+      '$stem',
+      'cover',
+      'folder',
+      'album',
+    };
+
+    try {
+      final images = dir
+          .listSync(followLinks: false)
+          .whereType<io.File>()
+          .where((file) =>
+              imageExtensions.contains(path.extension(file.path).toLowerCase()))
+          .toList();
+
+      for (final file in images) {
+        final name = path.basenameWithoutExtension(file.path).toLowerCase();
+        if (preferredNames.contains(name)) {
+          return file;
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   // ----------------------------

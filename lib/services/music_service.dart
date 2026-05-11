@@ -27,8 +27,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   bool _videoControllerReady = false;
   double _volume = 100.0;
 
-  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
-  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _positionNotifier =
+      ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier =
+      ValueNotifier(Duration.zero);
   final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
   final ValueNotifier<double> _volumeNotifier = ValueNotifier(100.0);
 
@@ -75,7 +77,18 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   bool _supportsPitchControl = true;
   List<String>? _lastUsedPaths;
 
-  static const List<int> _eqFreqs = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  static const List<int> _eqFreqs = [
+    31,
+    62,
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000,
+    16000
+  ];
   static const Map<String, List<double>> _eqPresets = {
     'Normal': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     'Pop': [-1, 2, 4, 5, 4, 2, 0, -1, -2, -3],
@@ -146,7 +159,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     // Detect video tracks at runtime (works for mp3/m4a with embedded video too)
     _player.stream.tracks.listen((tracks) {
       final hadVideo = _hasVideoTrack;
-      _hasVideoTrack = tracks.video.length > 1; // first track is usually "no video"
+      _hasVideoTrack =
+          tracks.video.length > 1; // first track is usually "no video"
       if (hadVideo != _hasVideoTrack) notifyListeners();
     });
 
@@ -157,7 +171,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<Music> get musicList => _musicList;
-  Music? get currentMusic => _musicList.isNotEmpty && _currentIndex < _musicList.length ? _musicList[_currentIndex] : null;
+  Music? get currentMusic =>
+      _musicList.isNotEmpty && _currentIndex < _musicList.length
+          ? _musicList[_currentIndex]
+          : null;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
   Duration get position => _position;
@@ -174,17 +191,27 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   VideoController? get videoController => _videoController;
   bool get videoControllerReady => _videoControllerReady;
   bool get hasVideoTrack => _hasVideoTrack;
-  
-  /// Returns true if the current media has a video track AND video rendering is available.
-  /// Works for standalone video files AND audio files with embedded video.
+
+  /// Returns true if the current media should be treated as a video.
+  /// Prioritizes known audio extensions to ensure music files use the dedicated music player interface.
   bool get isCurrentMediaVideo {
     if (currentMusic == null || !_videoControllerReady) return false;
-    // Runtime detection is priority
-    if (_hasVideoTrack) return true;
-    // Extension fallback for known video formats
+
+    if (currentMusic!.genre == 'YouTube Music Video') return true;
+    if (currentMusic!.genre == 'YouTube Music') return false;
+
     final ext = currentMusic!.filePath.split('.').last.toLowerCase();
-    return ['mp4', 'mkv', 'webm', 'avi', 'mov'].contains(ext);
+    // If it's a known audio format, it's music (even if it has an embedded cover art stream)
+    if (['mp3', 'm4a', 'flac', 'wav', 'ogg', 'aac', 'wma'].contains(ext))
+      return false;
+
+    // If it's a known video format, it's video
+    if (['mp4', 'mkv', 'webm', 'avi', 'mov'].contains(ext)) return true;
+
+    // Fallback to runtime detection for other formats
+    return _hasVideoTrack;
   }
+
   bool get isRepeatOne => _isRepeatOne;
   bool get isRepeatAll => _isRepeatAll;
   bool get isEffectsEnabled => _isEffectsEnabled;
@@ -215,13 +242,30 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     return _globalEqValues;
   }
 
-  List<Music> get favoriteMusicList => _musicList.where((m) => m.isFavorite).toList();
+  List<Music> get favoriteMusicList =>
+      _musicList.where((m) => m.isFavorite).toList();
   List<Playlist> get systemPlaylists => [
-    Playlist(id: 'favorites', name: 'Favorites', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'most_listened', name: 'Most Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'early_listened', name: 'Early Listened', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-    Playlist(id: 'daily_mix', name: 'Daily Mix', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-  ];
+        Playlist(
+            id: 'favorites',
+            name: 'Favorites',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now()),
+        Playlist(
+            id: 'most_listened',
+            name: 'Most Listened',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now()),
+        Playlist(
+            id: 'early_listened',
+            name: 'Early Listened',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now()),
+        Playlist(
+            id: 'daily_mix',
+            name: 'Daily Mix',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now()),
+      ];
   List<Playlist> get allPlaylists => [...systemPlaylists, ..._playlists];
 
   set currentIndex(int index) {
@@ -330,7 +374,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     _currentPreset = 'Normal';
     if (_useSongSpecificSettings && currentMusic != null) {
       _songSettings[currentMusic!.id] ??= {};
-      _songSettings[currentMusic!.id]['eq'] = List<double>.from(_eqPresets['Normal']!);
+      _songSettings[currentMusic!.id]['eq'] =
+          List<double>.from(_eqPresets['Normal']!);
     } else {
       _globalEqValues = List<double>.from(_eqPresets['Normal']!);
     }
@@ -377,8 +422,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
             }
           }
           if (_reverb > 0) {
-            final preDelay = 'aecho=0.8:0.88:${(_reverb * 60).toInt() + 20}:${_reverb * 0.3}';
-            final reverb = 'freeverb=roomsize=${0.7 + (_reverb * 0.25)}:damp=${0.2 + (1.0 - _reverb) * 0.5}:wet=${_reverb * 0.8}:dry=${1.0 - (_reverb * 0.5)}:width=1.0';
+            final preDelay =
+                'aecho=0.8:0.88:${(_reverb * 60).toInt() + 20}:${_reverb * 0.3}';
+            final reverb =
+                'freeverb=roomsize=${0.7 + (_reverb * 0.25)}:damp=${0.2 + (1.0 - _reverb) * 0.5}:wet=${_reverb * 0.8}:dry=${1.0 - (_reverb * 0.5)}:width=1.0';
             final spatial = 'extrastereo=m=${1.0 + _reverb * 1.5}';
             af += '${af.isEmpty ? '' : ','}$preDelay,$reverb,$spatial';
           }
@@ -411,7 +458,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     const steps = 15;
     final interval = duration.inMilliseconds ~/ steps;
     final delta = (end - start) / steps;
-    
+
     for (int i = 0; i <= steps; i++) {
       final vol = (start + delta * i).clamp(0.0, 1.0);
       _player.setVolume(vol * 100);
@@ -440,10 +487,13 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       // Smooth fade out before opening new track
-      if (_isPlaying) await _fadeVolume(1.0, 0.0, const Duration(milliseconds: 250));
+      if (_isPlaying)
+        await _fadeVolume(1.0, 0.0, const Duration(milliseconds: 250));
 
       final startPosition =
-          (_shouldResumeCurrentTrack && _resumeTrackId == trackId) ? _resumePosition : Duration.zero;
+          (_shouldResumeCurrentTrack && _resumeTrackId == trackId)
+              ? _resumePosition
+              : Duration.zero;
       _hasVideoTrack = false; // Reset before opening new media
       await _player.open(Media(track.filePath), play: false);
       _openedMusicId = trackId;
@@ -460,7 +510,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       if (_shouldResumeCurrentTrack) {
         await _applyResumePositionIfNeeded(trackId);
       }
-      
+
       _player.setVolume(0);
       await _player.play();
       _fadeVolume(0.0, 1.0, const Duration(milliseconds: 350));
@@ -560,14 +610,21 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> loadSystemMusic({List<String>? customPaths, bool clearExisting = true}) async {
+  Future<void> loadSystemMusic(
+      {List<String>? customPaths, bool clearExisting = true}) async {
     if (_isLoadingSystemMusic) return;
 
     final hasPermission = await MusicScannerService.checkPermissions();
     if (!hasPermission) return;
 
     _isLoadingSystemMusic = true;
-    if (customPaths != null) _lastUsedPaths = customPaths;
+    if (customPaths != null) {
+      if (clearExisting || _lastUsedPaths == null) {
+        _lastUsedPaths = customPaths;
+      } else {
+        _lastUsedPaths = {..._lastUsedPaths!, ...customPaths}.toList();
+      }
+    }
 
     final previousCurrentId = currentMusic?.id;
     if (clearExisting) {
@@ -583,7 +640,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       onBatchUpdate: (batch) {
         bool changed = false;
         for (final music in batch) {
-          if (!_musicList.any((existing) => existing.filePath == music.filePath)) {
+          if (!_musicList
+              .any((existing) => existing.filePath == music.filePath)) {
             _musicList.add(music);
             changed = true;
           }
@@ -641,7 +699,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> updateMusicMetadata(String id, String title, String artist, String album, String genre) async {
+  Future<void> updateMusicMetadata(String id, String title, String artist,
+      String album, String genre) async {
     final index = _musicList.indexWhere((music) => music.id == id);
     if (index != -1) {
       final old = _musicList[index];
@@ -666,8 +725,11 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   void _refreshSystemPlaylistsInternal() {
     if (_musicList.isEmpty) return;
 
-    final history = _musicList.where((music) => music.lastPlayed != null).toList()
-      ..sort((a, b) => (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
+    final history = _musicList
+        .where((music) => music.lastPlayed != null)
+        .toList()
+      ..sort((a, b) =>
+          (b.lastPlayed ?? DateTime(0)).compareTo(a.lastPlayed ?? DateTime(0)));
     _cachedEarlyListened = history.take(10).toList();
 
     final topPlayed = _musicList.where((music) => music.playCount > 0).toList()
@@ -687,16 +749,21 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     final genreScores = <String, int>{};
     for (final music in _musicList) {
       if (music.playCount > 0) {
-        genreScores[music.genre] = (genreScores[music.genre] ?? 0) + music.playCount;
+        genreScores[music.genre] =
+            (genreScores[music.genre] ?? 0) + music.playCount;
       }
     }
 
-    final sortedGenres = genreScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final sortedGenres = genreScores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final topGenres = sortedGenres.take(3).map((entry) => entry.key).toList();
 
     final mix = <Music>{};
     if (topGenres.isNotEmpty) {
-      final genrePool = _musicList.where((music) => topGenres.contains(music.genre)).toList()..shuffle();
+      final genrePool = _musicList
+          .where((music) => topGenres.contains(music.genre))
+          .toList()
+        ..shuffle();
       mix.addAll(genrePool.take(10));
     }
 
@@ -706,7 +773,12 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> createPlaylist(String name) async {
-    _playlists.add(Playlist(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name, musicIds: [], createdAt: DateTime.now(), updatedAt: DateTime.now()));
+    _playlists.add(Playlist(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: name,
+        musicIds: [],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now()));
     await _savePlaylists();
     notifyListeners();
   }
@@ -758,19 +830,44 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void playMusicFromQueue(List<Music> queue, Music target, {String? playlistId}) {
+  void playMusicFromQueue(List<Music> queue, Music target,
+      {String? playlistId}) {
     startQueue(queue, startMusicId: target.id, playlistId: playlistId);
     play();
   }
 
-  void startQueue(List<Music> queue, {String? startMusicId, String? playlistId}) {
-    final ids = queue.map((music) => music.id).where((id) => _musicList.any((track) => track.id == id)).toList();
+  Future<void> playStreamingMusic(Music music) async {
+    final existingIndex = _musicList.indexWhere((item) => item.id == music.id);
+    if (existingIndex == -1) {
+      _musicList.add(music);
+      _systemMusicCount = _musicList.length;
+      _activeQueueIds.add(music.id);
+    } else {
+      _musicList[existingIndex] = music;
+    }
+
+    _currentPlaylistId = null;
+    _currentIndex = _musicList.indexWhere((item) => item.id == music.id);
+    _activeQueueIds = [music.id];
+    _shuffledQueueIds = [music.id];
+    _clearResumeState(keepOpenedTrack: false);
+    notifyListeners();
+    await play();
+  }
+
+  void startQueue(List<Music> queue,
+      {String? startMusicId, String? playlistId}) {
+    final ids = queue
+        .map((music) => music.id)
+        .where((id) => _musicList.any((track) => track.id == id))
+        .toList();
     if (ids.isEmpty) return;
 
     _activeQueueIds = ids;
     _currentPlaylistId = playlistId;
     final selectedId = startMusicId ?? ids.first;
-    final actualIndex = _musicList.indexWhere((music) => music.id == selectedId);
+    final actualIndex =
+        _musicList.indexWhere((music) => music.id == selectedId);
     if (actualIndex != -1) {
       if (_musicList[actualIndex].id != currentMusic?.id) {
         _clearResumeState(keepOpenedTrack: false);
@@ -788,7 +885,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
     _activeQueueIds.remove(musicId);
     final currentId = currentMusic?.id;
-    final insertIndex = currentId == null ? _activeQueueIds.length : _activeQueueIds.indexOf(currentId) + 1;
+    final insertIndex = currentId == null
+        ? _activeQueueIds.length
+        : _activeQueueIds.indexOf(currentId) + 1;
     final safeIndex = insertIndex.clamp(0, _activeQueueIds.length);
     _activeQueueIds.insert(safeIndex, musicId);
     _rebuildShuffledQueue();
@@ -843,9 +942,15 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     if (id == 'daily_mix') return _cachedDailyMix;
     final playlist = _playlists.firstWhere(
       (item) => item.id == id,
-      orElse: () => Playlist(id: '', name: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      orElse: () => Playlist(
+          id: '',
+          name: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now()),
     );
-    return _musicList.where((music) => playlist.musicIds.contains(music.id)).toList();
+    return _musicList
+        .where((music) => playlist.musicIds.contains(music.id))
+        .toList();
   }
 
   Future<void> setRememberPlayback(bool value) async {
@@ -871,17 +976,20 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       _rememberPlayback = prefs.getBool(_rememberPlaybackKey) ?? true;
       final eqList = prefs.getStringList('glob_eq');
       if (eqList != null) {
-        _globalEqValues = eqList.map((entry) => double.tryParse(entry) ?? 0.0).toList();
+        _globalEqValues =
+            eqList.map((entry) => double.tryParse(entry) ?? 0.0).toList();
       }
 
       final savedSongSettings = prefs.getString('song_eff_map');
       if (savedSongSettings != null && savedSongSettings.isNotEmpty) {
-        _songSettings = Map<String, dynamic>.from(jsonDecode(savedSongSettings));
+        _songSettings =
+            Map<String, dynamic>.from(jsonDecode(savedSongSettings));
       }
 
       final savedPlayback = prefs.getString(_playbackStateKey);
       if (savedPlayback != null && savedPlayback.isNotEmpty) {
-        _pendingPlaybackState = Map<String, dynamic>.from(jsonDecode(savedPlayback));
+        _pendingPlaybackState =
+            Map<String, dynamic>.from(jsonDecode(savedPlayback));
       }
 
       final dir = await getApplicationDocumentsDirectory();
@@ -902,12 +1010,15 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       if (await file.exists()) {
         final data = jsonDecode(await file.readAsString()) as List;
         for (final item in data) {
-          final index = _musicList.indexWhere((music) => music.id == item['id']);
+          final index =
+              _musicList.indexWhere((music) => music.id == item['id']);
           if (index != -1) {
             _musicList[index] = Music.fromBase(
               _musicList[index],
               item['playCount'] ?? 0,
-              item['lastPlayed'] != null ? DateTime.fromMillisecondsSinceEpoch(item['lastPlayed']) : null,
+              item['lastPlayed'] != null
+                  ? DateTime.fromMillisecondsSinceEpoch(item['lastPlayed'])
+                  : null,
             );
           }
         }
@@ -934,13 +1045,15 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
   void _saveDebounced() {
     _saveSettingsTimer?.cancel();
-    _saveSettingsTimer = Timer(const Duration(seconds: 2), _saveAudioEffectsSettings);
+    _saveSettingsTimer =
+        Timer(const Duration(seconds: 2), _saveAudioEffectsSettings);
   }
 
   void _savePlaybackDebounced() {
     if (!_rememberPlayback) return;
     _savePlaybackTimer?.cancel();
-    _savePlaybackTimer = Timer(const Duration(milliseconds: 800), _savePlaybackState);
+    _savePlaybackTimer =
+        Timer(const Duration(milliseconds: 800), _savePlaybackState);
   }
 
   Future<void> _saveAudioEffectsSettings() async {
@@ -948,7 +1061,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('master_eff', _isEffectsEnabled);
       await prefs.setString('song_eff_map', jsonEncode(_songSettings));
-      await prefs.setStringList('glob_eq', _globalEqValues.map((e) => e.toString()).toList());
+      await prefs.setStringList(
+          'glob_eq', _globalEqValues.map((e) => e.toString()).toList());
     } catch (e) {
       debugPrint('Error saving audio effects: $e');
     }
@@ -976,7 +1090,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _applyResumePositionIfNeeded(String trackId) async {
-    if (!_shouldResumeCurrentTrack || _resumeTrackId != trackId || _resumePosition <= Duration.zero) {
+    if (!_shouldResumeCurrentTrack ||
+        _resumeTrackId != trackId ||
+        _resumePosition <= Duration.zero) {
       return;
     }
 
@@ -1026,7 +1142,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         final dir = await getApplicationDocumentsDirectory();
         final file = File('${dir.path}/favorites.json');
-        final ids = _musicList.where((music) => music.isFavorite).map((music) => music.id).toList();
+        final ids = _musicList
+            .where((music) => music.isFavorite)
+            .map((music) => music.id)
+            .toList();
         await file.writeAsString(jsonEncode(ids));
       } catch (e) {
         debugPrint('Error saving favorite: $e');
@@ -1038,7 +1157,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/playlists.json');
-      await file.writeAsString(jsonEncode(_playlists.map((playlist) => playlist.toJson()).toList()));
+      await file.writeAsString(
+          jsonEncode(_playlists.map((playlist) => playlist.toJson()).toList()));
     } catch (e) {
       debugPrint('Error saving playlists: $e');
     }
@@ -1048,7 +1168,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/music_stats.json');
-      await file.writeAsString(jsonEncode(_musicList.map((music) => music.toJson()).toList()));
+      await file.writeAsString(
+          jsonEncode(_musicList.map((music) => music.toJson()).toList()));
     } catch (e) {
       debugPrint('Error saving stats: $e');
     }
@@ -1123,7 +1244,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     final targetIndex = queueIndex + direction;
     if (targetIndex < 0) {
       if (!_isRepeatAll) return false;
-      final loopIndex = _musicList.indexWhere((music) => music.id == order.last);
+      final loopIndex =
+          _musicList.indexWhere((music) => music.id == order.last);
       if (loopIndex == -1) return false;
       _currentIndex = loopIndex;
       return true;
@@ -1138,13 +1260,15 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
         seekTo(Duration.zero);
         return false;
       }
-      final loopIndex = _musicList.indexWhere((music) => music.id == order.first);
+      final loopIndex =
+          _musicList.indexWhere((music) => music.id == order.first);
       if (loopIndex == -1) return false;
       _currentIndex = loopIndex;
       return true;
     }
 
-    final actualIndex = _musicList.indexWhere((music) => music.id == order[targetIndex]);
+    final actualIndex =
+        _musicList.indexWhere((music) => music.id == order[targetIndex]);
     if (actualIndex == -1) return false;
     _currentIndex = actualIndex;
     return true;
@@ -1176,7 +1300,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
     final currentId = currentMusic?.id ?? previousCurrentId;
     if (currentId != null) {
-      final actualIndex = _musicList.indexWhere((music) => music.id == currentId);
+      final actualIndex =
+          _musicList.indexWhere((music) => music.id == currentId);
       if (actualIndex != -1) {
         _currentIndex = actualIndex;
       }
@@ -1189,13 +1314,22 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _restorePlaybackStateIfNeeded() async {
-    if (_hasRestoredPlayback || !_rememberPlayback || _pendingPlaybackState == null || _musicList.isEmpty) {
+    if (_hasRestoredPlayback ||
+        !_rememberPlayback ||
+        _pendingPlaybackState == null ||
+        _musicList.isEmpty) {
       return;
     }
 
     final state = _pendingPlaybackState!;
-    final queueIds = (state['queueIds'] as List?)?.map((item) => item.toString()).where((id) => _musicList.any((music) => music.id == id)).toList() ?? [];
-    _activeQueueIds = queueIds.isNotEmpty ? queueIds : _musicList.map((music) => music.id).toList();
+    final queueIds = (state['queueIds'] as List?)
+            ?.map((item) => item.toString())
+            .where((id) => _musicList.any((music) => music.id == id))
+            .toList() ??
+        [];
+    _activeQueueIds = queueIds.isNotEmpty
+        ? queueIds
+        : _musicList.map((music) => music.id).toList();
 
     _currentPlaylistId = state['playlistId'] as String?;
     _isShuffle = state['shuffle'] == true;
@@ -1205,7 +1339,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
     final currentId = state['currentMusicId']?.toString();
     if (currentId != null) {
-      final restoredIndex = _musicList.indexWhere((music) => music.id == currentId);
+      final restoredIndex =
+          _musicList.indexWhere((music) => music.id == currentId);
       if (restoredIndex != -1) {
         _currentIndex = restoredIndex;
       }
@@ -1216,7 +1351,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     _pendingPlaybackState = null;
 
     try {
-      await _player.open(Media(_musicList[_currentIndex].filePath), play: false);
+      await _player.open(Media(_musicList[_currentIndex].filePath),
+          play: false);
       _openedMusicId = _musicList[_currentIndex].id;
       final positionMs = state['positionMs'] as int? ?? 0;
       if (positionMs > 0) {

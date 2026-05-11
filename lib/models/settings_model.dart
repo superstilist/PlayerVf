@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ViewMode { card, list }
+
 enum NavPosition { top, bottom, left, right }
+
 enum ThemePreset { classic, fox, anime, azure, cosmic, sunset, midnight }
+
 enum ParticleEffect { none, sakura, snow, stars, bubbles, rain }
 
 class SettingsModel extends ChangeNotifier {
   static const String _musicPathsKey = 'music_source_paths';
+  static const String youtubeMusicDownloadPathKey =
+      'youtube_music_download_path';
   static const String _cardSizeKey = 'card_size';
   static const String _cardMarginsKey = 'card_margins';
   static const String _cardCountKey = 'card_count';
@@ -24,9 +29,11 @@ class SettingsModel extends ChangeNotifier {
   static const String _particleEffectKey = 'particle_effect';
   static const String _playVideoBackgroundKey = 'play_video_background';
   static const String _videoCoverShowLiveKey = 'video_cover_show_live';
-  static const String _videoDoubleTapFullscreenKey = 'video_double_tap_fullscreen';
+  static const String _videoDoubleTapFullscreenKey =
+      'video_double_tap_fullscreen';
 
   List<String> musicSourcePaths = [];
+  String youtubeMusicDownloadPath = '';
   double cardSize = 140.0;
   double cardMargins = 8.0;
   double topMargin = 60.0;
@@ -53,36 +60,44 @@ class SettingsModel extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       musicSourcePaths = prefs.getStringList(_musicPathsKey) ?? [];
+      youtubeMusicDownloadPath =
+          prefs.getString(youtubeMusicDownloadPathKey) ?? '';
       cardSize = prefs.getDouble(_cardSizeKey) ?? 140.0;
       cardMargins = prefs.getDouble(_cardMarginsKey) ?? 8.0;
       topMargin = prefs.getDouble(_topMarginKey) ?? 60.0;
       cardCount = prefs.getInt(_cardCountKey) ?? 3;
       useAutoCardCount = prefs.getBool(_useAutoCardCountKey) ?? true;
-      
-      final themeModeIndex = prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
+
+      final themeModeIndex =
+          prefs.getInt(_themeModeKey) ?? ThemeMode.dark.index;
       themeMode = ThemeMode.values[themeModeIndex];
 
       final viewModeIndex = prefs.getInt(_viewModeKey) ?? ViewMode.card.index;
       viewMode = ViewMode.values[viewModeIndex];
 
-      final navPosIndex = prefs.getInt(_navPositionKey) ?? NavPosition.bottom.index;
+      final navPosIndex =
+          prefs.getInt(_navPositionKey) ?? NavPosition.bottom.index;
       navPosition = NavPosition.values[navPosIndex];
 
-      final themePresetIndex = prefs.getInt(_themePresetKey) ?? ThemePreset.classic.index;
+      final themePresetIndex =
+          prefs.getInt(_themePresetKey) ?? ThemePreset.classic.index;
       themePreset = ThemePreset.values[themePresetIndex];
 
-      final particleIndex = prefs.getInt(_particleEffectKey) ?? ParticleEffect.none.index;
+      final particleIndex =
+          prefs.getInt(_particleEffectKey) ?? ParticleEffect.none.index;
       particleEffect = ParticleEffect.values[particleIndex];
 
       fontSize = prefs.getDouble(_fontSizeKey) ?? 14.0;
       borderRadius = prefs.getDouble(_borderRadiusKey) ?? 12.0;
-      final accentColorValue = prefs.getInt(_accentColorKey) ?? Colors.teal.value;
+      final accentColorValue =
+          prefs.getInt(_accentColorKey) ?? Colors.teal.value;
       accentColor = Color(accentColorValue);
       seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
       playVideoBackground = prefs.getBool(_playVideoBackgroundKey) ?? true;
       videoCoverShowLive = prefs.getBool(_videoCoverShowLiveKey) ?? true;
-      videoDoubleTapFullscreen = prefs.getBool(_videoDoubleTapFullscreenKey) ?? true;
-      
+      videoDoubleTapFullscreen =
+          prefs.getBool(_videoDoubleTapFullscreenKey) ?? true;
+
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -239,6 +254,15 @@ class SettingsModel extends ChangeNotifier {
     }
   }
 
+  Future<void> setYoutubeMusicDownloadPath(String path) async {
+    youtubeMusicDownloadPath = path;
+    if (path.isNotEmpty && !musicSourcePaths.contains(path)) {
+      musicSourcePaths.add(path);
+    }
+    notifyListeners();
+    await _saveSettings();
+  }
+
   Future<void> removeMusicPath(String path) async {
     musicSourcePaths.remove(path);
     notifyListeners();
@@ -255,6 +279,8 @@ class SettingsModel extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_musicPathsKey, musicSourcePaths);
+      await prefs.setString(
+          youtubeMusicDownloadPathKey, youtubeMusicDownloadPath);
       await prefs.setDouble(_cardSizeKey, cardSize);
       await prefs.setDouble(_cardMarginsKey, cardMargins);
       await prefs.setDouble(_topMarginKey, topMargin);
@@ -271,7 +297,8 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setInt(_seekStepSecondsKey, seekStepSeconds);
       await prefs.setBool(_playVideoBackgroundKey, playVideoBackground);
       await prefs.setBool(_videoCoverShowLiveKey, videoCoverShowLive);
-      await prefs.setBool(_videoDoubleTapFullscreenKey, videoDoubleTapFullscreen);
+      await prefs.setBool(
+          _videoDoubleTapFullscreenKey, videoDoubleTapFullscreen);
     } catch (e) {
       debugPrint('Error saving settings: $e');
     }

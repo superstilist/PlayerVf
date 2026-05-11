@@ -196,19 +196,23 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
         fit: StackFit.expand,
         children: [
           // Full-screen cover art
-          CoverArtTexture(
-            coverArtPath: currentMusic?.coverPath ?? '',
-            width: double.infinity,
-            height: double.infinity,
-          ),
+          if (currentMusic != null)
+            CoverArtTexture(
+              coverArtPath: currentMusic.coverPath,
+              width: double.infinity,
+              height: double.infinity,
+            )
+          else
+            Container(color: theme.colorScheme.surface),
+            
           // Blur overlay
           ClipRect(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+              filter: ImageFilter.blur(sigmaX: 45.0, sigmaY: 45.0),
               child: Container(
                 color: theme.brightness == Brightness.dark
-                    ? Colors.black.withOpacity(0.45)
-                    : Colors.white.withOpacity(0.35),
+                    ? Colors.black.withOpacity(0.5)
+                    : Colors.white.withOpacity(0.4),
               ),
             ),
           ),
@@ -217,40 +221,9 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
     );
   }
 
-  /// Hero artwork card:
-  /// - MUSIC: always shows cover art (no video).
-  /// - VIDEO: shows live video in the card if [settings.videoCoverShowLive] is true
-  ///          AND [settings.playVideoBackground] is true; otherwise shows cover art.
+  /// Hero artwork card for MUSIC (always shows cover art).
   Widget _buildHeroArtwork(Music? music, CoverArtPalette palette, MusicService musicService, SettingsModel settings) {
     final size = 320.s;
-    final bool isVideo = musicService.isCurrentMediaVideo;
-    final bool hasVideoController = musicService.videoController != null;
-
-    // For video: show live video in the card only if BOTH settings are enabled.
-    final bool showLiveVideoInCard =
-        isVideo && hasVideoController && settings.playVideoBackground && settings.videoCoverShowLive;
-
-    // Build the artwork content for the card (cover art always as base; video overlays if needed)
-    Widget cardContent = Stack(
-      fit: StackFit.expand,
-      children: [
-        // Cover art is always the base layer in the card
-        CoverArtTexture(
-          coverArtPath: music?.coverPath ?? '',
-          width: size,
-          height: size,
-        ),
-        // Live video overlays for video media only
-        if (showLiveVideoInCard)
-          SizedBox.expand(
-            child: Video(
-              controller: musicService.videoController!,
-              fit: BoxFit.cover,
-              controls: NoVideoControls,
-            ),
-          ),
-      ],
-    );
 
     return Center(
       child: Stack(
@@ -275,48 +248,34 @@ class _PlayerPageState extends State<PlayerPage> with SingleTickerProviderStateM
                 ),
               );
             },
-            child: GestureDetector(
-              onDoubleTap: (isVideo && hasVideoController && settings.videoDoubleTapFullscreen)
-                  ? () => _openFullscreenVideo(context, musicService)
-                  : null,
-              child: Hero(
-                key: ValueKey(music?.id ?? 'none'),
-                tag: 'music-art-${music?.id ?? 'none'}',
-                child: Container(
-                  width: size,
-                  height: size,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(40.s),
-                    color: Colors.black,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(40.s),
-                    child: cardContent,
+            child: Hero(
+              key: ValueKey(music?.id ?? 'none'),
+              tag: 'music-art-${music?.id ?? 'none'}',
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(40.s),
+                  color: Colors.black,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 30,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(40.s),
+                  child: CoverArtTexture(
+                    coverArtPath: music?.coverPath ?? '',
+                    width: size,
+                    height: size,
                   ),
                 ),
               ),
             ),
           ),
-          // Fullscreen hint icon for video
-          if (isVideo && hasVideoController && settings.videoDoubleTapFullscreen)
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: () => _openFullscreenVideo(context, musicService),
-                child: Container(
-                  padding: EdgeInsets.all(14.s),
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(24.s),
-                      bottomRight: Radius.circular(40.s),
-                    ),
-                  ),
-                  child: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 28),
-                ),
-              ),
-            ),
         ],
       ),
     );

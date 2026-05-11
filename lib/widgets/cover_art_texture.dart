@@ -18,17 +18,25 @@ class CoverArtTexture extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (coverArtPath.isNotEmpty) {
+      if (coverArtPath.startsWith('http://') ||
+          coverArtPath.startsWith('https://')) {
+        return ClipRRect(
+          borderRadius: borderRadius ?? BorderRadius.zero,
+          child: Image.network(
+            coverArtPath,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            errorBuilder: (context, error, stackTrace) => _buildDefaultCover(),
+          ),
+        );
+      }
+
       final file = io.File(coverArtPath);
       // We still check if file exists to avoid showing errorBuilder immediately
       if (file.existsSync()) {
-        final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-        final int? cacheWidth = width.isFinite 
-            ? (width * devicePixelRatio).toInt() 
-            : null;
-        final int? cacheHeight = height.isFinite 
-            ? (height * devicePixelRatio).toInt() 
-            : null;
-
         return ClipRRect(
           borderRadius: borderRadius ?? BorderRadius.zero,
           child: Image.file(
@@ -36,9 +44,8 @@ class CoverArtTexture extends StatelessWidget {
             width: width,
             height: height,
             fit: BoxFit.cover,
-            // Optimization: use smaller cache size for better performance and memory
-            cacheWidth: cacheWidth,
-            cacheHeight: cacheHeight,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
             errorBuilder: (context, error, stackTrace) {
               return _buildDefaultCover();
             },
@@ -46,7 +53,7 @@ class CoverArtTexture extends StatelessWidget {
         );
       }
     }
-    
+
     return _buildDefaultCover();
   }
 
@@ -66,16 +73,15 @@ class CoverArtTexture extends StatelessWidget {
           ],
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final size = constraints.maxWidth.isFinite ? constraints.maxWidth * 0.4 : 60.0;
-          return Icon(
-            Icons.music_note,
-            color: Colors.white54,
-            size: size,
-          );
-        }
-      ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final size =
+            constraints.maxWidth.isFinite ? constraints.maxWidth * 0.4 : 60.0;
+        return Icon(
+          Icons.music_note,
+          color: Colors.white54,
+          size: size,
+        );
+      }),
     );
   }
 }
