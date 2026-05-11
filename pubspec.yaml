@@ -61,3 +61,5 @@ flutter:
 
   assets:
     - assets/images/
+    - lib/python/api.py
+    - lib/python/requirements.txt
