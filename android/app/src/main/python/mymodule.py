@@ -140,6 +140,21 @@ def _cover_bytes(*items):
     return None
 
 
+def _preview_thumbnail_url(*items):
+    for url in _thumbnail_candidates(*items):
+        for candidate in _high_quality_thumbnail_urls(url):
+            try:
+                with requests.get(candidate, stream=True, timeout=8) as response:
+                    response.raise_for_status()
+                    content_type = (response.headers.get("content-type") or "").lower()
+                    chunk = next(response.iter_content(16), b"")
+                    if "image/" in content_type or _detect_image_mime(chunk, candidate):
+                        return candidate
+            except Exception:
+                continue
+    return ""
+
+
 def _delete_sidecar_images(media_path):
     for suffix in (".webp", ".jpg", ".jpeg", ".png"):
         for candidate in (
@@ -401,7 +416,22 @@ def stream_youtube_music(item_json):
     video_id = item.get("videoId") or item.get("video_id")
     raw = item.get("raw") if isinstance(item.get("raw"), dict) else item
     video_id = video_id or raw.get("videoId")
-    is_video = (item.get("resultType") or raw.get("resultType") or "").lower() == "video"
+    result_type = (item.get("resultType") or raw.get("resultType") or "").lower()
+    is_video = result_type == "video"
+
+    if not video_id and result_type in ("album", "playlist", "featured_playlist", "community_playlist"):
+        ytmusic = _client()
+        entity_type, entity = _entity_from_item(ytmusic, item)
+        tracks = entity.get("tracks", []) if isinstance(entity, dict) else []
+        first_track = next((track for track in tracks if track.get("videoId")), None)
+        if first_track:
+            video_id = first_track.get("videoId")
+            raw = first_track
+            if not item.get("title"):
+                item["title"] = first_track.get("title", "")
+            if not item.get("artist"):
+                item["artist"] = _artist_text(first_track)
+
     if not video_id:
         raise ValueError("This result cannot be streamed because it has no videoId.")
 
@@ -409,18 +439,26 @@ def stream_youtube_music(item_json):
         "format": "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best" if is_video else "bestaudio[ext=m4a]/bestaudio/best",
         "quiet": True,
         "no_warnings": True,
+        "noplaylist": True,
         "skip_download": True,
     }
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
 
     album = raw.get("album", {})
+    info_thumbnails = {"thumbnails": info.get("thumbnails") or [{"url": info.get("thumbnail", "")}]}
+    preview_thumb = (
+        item.get("thumbnailUrl")
+        or _best_thumbnail(raw)
+        or _best_thumbnail(info_thumbnails)
+        or info.get("thumbnail", "")
+    )
     payload = {
         "url": info.get("url", ""),
         "title": item.get("title") or raw.get("title") or info.get("title") or "YouTube Music",
         "artist": item.get("artist") or _artist_text(raw) or info.get("uploader") or "YouTube Music",
         "album": album.get("name", "") if isinstance(album, dict) else "",
-        "thumbnailUrl": item.get("thumbnailUrl") or _best_thumbnail(raw) or info.get("thumbnail", ""),
+        "thumbnailUrl": preview_thumb,
         "durationSeconds": info.get("duration") or 0,
         "videoId": video_id,
         "isVideo": is_video,

@@ -21,7 +21,7 @@ dependencies:
   path_provider: ^2.1.1
   # Local storage
   shared_preferences: ^2.2.2
-  # Database for caching
+  # Database for cachingflutter build apk --release
   sqflite: ^2.3.0
   # ID3 tag parsing
   id3: ^1.0.2

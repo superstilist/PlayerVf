@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:ui';
 
 import '../models/music_model.dart';
 import '../models/playlist_model.dart';
@@ -23,7 +22,8 @@ class PlaylistDetailPage extends StatelessWidget {
       builder: (context, musicService, settings, child) {
         final musicList = musicService.getMusicListForPlaylist(playlist.id);
         final currentMusic = musicService.currentMusic;
-        final bgPath = currentMusic?.coverPath ?? (musicList.isNotEmpty ? musicList.first.coverPath : '');
+        final bgPath = currentMusic?.coverPath ??
+            (musicList.isNotEmpty ? musicList.first.coverPath : '');
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -32,7 +32,8 @@ class PlaylistDetailPage extends StatelessWidget {
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -41,11 +42,14 @@ class PlaylistDetailPage extends StatelessWidget {
               // ── Background Blur (Current Song) ──
               Positioned.fill(
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 1000),
+                  duration: const Duration(milliseconds: 280),
                   child: Stack(
                     key: ValueKey(bgPath),
                     children: [
-                      CoverArtTexture(coverArtPath: bgPath, width: double.infinity, height: double.infinity),
+                      CoverArtTexture(
+                          coverArtPath: bgPath,
+                          width: double.infinity,
+                          height: double.infinity),
                       Container(color: Colors.black.withOpacity(0.85)),
                     ],
                   ),
@@ -79,35 +83,45 @@ class PlaylistDetailPage extends StatelessWidget {
                             ),
                           ),
                           SizedBox(height: 32.h),
-                          
+
                           // Playlist Info
                           Text(
                             playlist.name,
-                            style: TextStyle(fontSize: 36.sp, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1.5),
+                            style: TextStyle(
+                                fontSize: 36.sp,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0),
                             textAlign: TextAlign.center,
                           ),
                           SizedBox(height: 8.h),
                           Text(
                             '${musicList.length} Tracks • curated for you',
-                            style: TextStyle(fontSize: 14.sp, color: Colors.white54, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                                fontSize: 14.sp,
+                                color: Colors.white54,
+                                fontWeight: FontWeight.w500),
                             textAlign: TextAlign.center,
                           ),
-                          
+
                           SizedBox(height: 24.h),
-                          
+
                           // Buttons Row
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               ElevatedButton.icon(
-                                onPressed: () => musicService.playPlaylist(playlist.id),
+                                onPressed: () =>
+                                    musicService.playPlaylist(playlist.id),
                                 icon: const Icon(Icons.play_arrow_rounded),
                                 label: const Text('Play All'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: settings.accentColor,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 28, vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18)),
                                   elevation: 8,
                                 ),
                               ),
@@ -117,9 +131,11 @@ class PlaylistDetailPage extends StatelessWidget {
                                   padding: const EdgeInsets.all(12),
                                   borderRadius: BorderRadius.circular(16),
                                   color: Colors.white.withOpacity(0.08),
-                                  child: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 24),
+                                  child: const Icon(Icons.edit_note_rounded,
+                                      color: Colors.white, size: 24),
                                 ),
-                                onPressed: () => _showEditPlaylistDialog(context, musicService),
+                                onPressed: () => _showEditPlaylistDialog(
+                                    context, musicService),
                               ),
                             ],
                           ),
@@ -132,7 +148,8 @@ class PlaylistDetailPage extends StatelessWidget {
                   if (musicList.isEmpty)
                     const SliverFillRemaining(
                       child: Center(
-                        child: Text('Empty Playlist', style: TextStyle(color: Colors.white24)),
+                        child: Text('Empty Playlist',
+                            style: TextStyle(color: Colors.white24)),
                       ),
                     )
                   else
@@ -140,8 +157,10 @@ class PlaylistDetailPage extends StatelessWidget {
                       padding: EdgeInsets.symmetric(horizontal: 16.w),
                       sliver: settings.viewMode == ViewMode.card
                           ? SliverGrid(
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: _calculateCrossAxisCount(Responsive.screenWidth),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: _calculateCrossAxisCount(
+                                    Responsive.screenWidth),
                                 crossAxisSpacing: 16.w,
                                 mainAxisSpacing: 16.h,
                                 childAspectRatio: 1.0,
@@ -155,8 +174,12 @@ class PlaylistDetailPage extends StatelessWidget {
                                       music: music,
                                       viewMode: ViewMode.card,
                                       heroPrefix: 'playlist-detail',
-                                      onTap: () => musicService.playMusicFromQueue(musicList, music, playlistId: playlist.id),
-                                      onDelete: () => musicService.removeMusicFromPlaylist(playlist.id, music.id),
+                                      onTap: () => musicService
+                                          .playMusicFromQueue(musicList, music,
+                                              playlistId: playlist.id),
+                                      onDelete: () =>
+                                          musicService.removeMusicFromPlaylist(
+                                              playlist.id, music.id),
                                     ),
                                   );
                                 },
@@ -173,8 +196,12 @@ class PlaylistDetailPage extends StatelessWidget {
                                       music: music,
                                       viewMode: ViewMode.list,
                                       heroPrefix: 'playlist-detail',
-                                      onTap: () => musicService.playMusicFromQueue(musicList, music, playlistId: playlist.id),
-                                      onDelete: () => musicService.removeMusicFromPlaylist(playlist.id, music.id),
+                                      onTap: () => musicService
+                                          .playMusicFromQueue(musicList, music,
+                                              playlistId: playlist.id),
+                                      onDelete: () =>
+                                          musicService.removeMusicFromPlaylist(
+                                              playlist.id, music.id),
                                     ),
                                   );
                                 },
@@ -196,12 +223,16 @@ class PlaylistDetailPage extends StatelessWidget {
     if (musicList.isEmpty) {
       return Container(
         color: Colors.white.withOpacity(0.05),
-        child: const Icon(Icons.playlist_play_rounded, size: 100, color: Colors.white10),
+        child: const Icon(Icons.playlist_play_rounded,
+            size: 100, color: Colors.white10),
       );
     }
 
     if (musicList.length < 4) {
-      return CoverArtTexture(coverArtPath: musicList[0].coverPath, width: double.infinity, height: double.infinity);
+      return CoverArtTexture(
+          coverArtPath: musicList[0].coverPath,
+          width: double.infinity,
+          height: double.infinity);
     }
 
     return Column(
@@ -209,16 +240,32 @@ class PlaylistDetailPage extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Expanded(child: CoverArtTexture(coverArtPath: musicList[0].coverPath, width: double.infinity, height: double.infinity)),
-              Expanded(child: CoverArtTexture(coverArtPath: musicList[1].coverPath, width: double.infinity, height: double.infinity)),
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[0].coverPath,
+                      width: double.infinity,
+                      height: double.infinity)),
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[1].coverPath,
+                      width: double.infinity,
+                      height: double.infinity)),
             ],
           ),
         ),
         Expanded(
           child: Row(
             children: [
-              Expanded(child: CoverArtTexture(coverArtPath: musicList[2].coverPath, width: double.infinity, height: double.infinity)),
-              Expanded(child: CoverArtTexture(coverArtPath: musicList[3].coverPath, width: double.infinity, height: double.infinity)),
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[2].coverPath,
+                      width: double.infinity,
+                      height: double.infinity)),
+              Expanded(
+                  child: CoverArtTexture(
+                      coverArtPath: musicList[3].coverPath,
+                      width: double.infinity,
+                      height: double.infinity)),
             ],
           ),
         ),
@@ -232,7 +279,8 @@ class PlaylistDetailPage extends StatelessWidget {
     return 4;
   }
 
-  void _showEditPlaylistDialog(BuildContext context, MusicService musicService) {
+  void _showEditPlaylistDialog(
+      BuildContext context, MusicService musicService) {
     final controller = TextEditingController(text: playlist.name);
     showDialog(
       context: context,
@@ -245,31 +293,39 @@ class PlaylistDetailPage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Edit Playlist', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text('Edit Playlist',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12)),
                 child: TextField(
                   controller: controller,
                   style: const TextStyle(fontSize: 16),
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: 'Playlist Name'),
+                  decoration: const InputDecoration(
+                      border: InputBorder.none, hintText: 'Playlist Name'),
                 ),
               ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel')),
                   const SizedBox(width: 12),
                   ElevatedButton(
                     onPressed: () {
                       if (controller.text.isNotEmpty) {
-                        musicService.renamePlaylist(playlist.id, controller.text);
+                        musicService.renamePlaylist(
+                            playlist.id, controller.text);
                         Navigator.pop(context);
                       }
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                     child: const Text('Rename'),
                   ),
                 ],

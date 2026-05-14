@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
-import 'dart:ui';
+import 'dart:ui' show ImageFilter, PointerDeviceKind;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -52,6 +52,7 @@ class MyApp extends StatelessWidget {
           themeMode: settings.themeMode,
           theme: _buildAppTheme(settings.accentColor, Brightness.light),
           darkTheme: _buildAppTheme(settings.accentColor, Brightness.dark),
+          scrollBehavior: const _SmoothScrollBehavior(),
           home: const MainNavigationScreen(),
           debugShowCheckedModeBanner: false,
         );
@@ -75,6 +76,15 @@ class MyApp extends StatelessWidget {
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
       splashFactory: InkSparkle.splashFactory,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -158,6 +168,30 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class _SmoothScrollBehavior extends MaterialScrollBehavior {
+  const _SmoothScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    final platform = getPlatform(context);
+    if (platform == TargetPlatform.android || platform == TargetPlatform.iOS) {
+      return const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      );
+    }
+    return const ClampingScrollPhysics();
+  }
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        ...super.dragDevices,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.touch,
+        PointerDeviceKind.stylus,
+      };
+}
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
@@ -183,14 +217,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     super.initState();
     _playerAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 360),
     );
     _playerSlideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _playerAnimationController,
-      curve: Curves.easeOutQuart,
+      curve: Curves.easeOutCubic,
     ));
 
     _playerAnimationController.addListener(() {
@@ -355,7 +389,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final coverPath = musicService.currentMusic?.coverPath;
     return Positioned.fill(
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 420),
+        duration: const Duration(milliseconds: 280),
         child: coverPath == null || coverPath.isEmpty
             ? Container(
                 key: const ValueKey('bg-empty'),
@@ -466,7 +500,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       onTap: () => _onDestinationSelected(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
         padding: EdgeInsets.symmetric(horizontal: 12.s, vertical: 8.s),
         decoration: BoxDecoration(
@@ -496,23 +530,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     return Column(
       children: [
         AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
           height: _isSearchOpen ? 64.h : 0,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _isSearchOpen ? _buildSearchBar(theme) : null,
         ),
         Expanded(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
+            duration: const Duration(milliseconds: 180),
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeOutCubic,
             transitionBuilder: (child, animation) {
               return FadeTransition(opacity: animation, child: child);
             },
-            child: IndexedStack(
-                key: ValueKey<int>(_selectedIndex),
-                index: _selectedIndex,
-                children: _screens),
+            child: IndexedStack(index: _selectedIndex, children: _screens),
           ),
         ),
       ],
@@ -569,7 +601,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 SizedBox(width: 16.w),
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
+                    duration: const Duration(milliseconds: 220),
                     child: Column(
                         key: ValueKey(currentMusic.id),
                         mainAxisAlignment: MainAxisAlignment.center,

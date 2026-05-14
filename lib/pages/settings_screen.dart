@@ -95,7 +95,6 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         IconButton(
-                          tooltip: 'Use default',
                           onPressed: () => _useDefaultYoutubeDownloadPath(
                               settings, musicService),
                           icon: const Icon(Icons.restore_rounded),

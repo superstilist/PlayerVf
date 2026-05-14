@@ -27,7 +27,7 @@ class _FadeInUpAnimationState extends State<FadeInUpAnimation>
     super.initState();
 
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 280),
       vsync: this,
     );
 
@@ -37,7 +37,8 @@ class _FadeInUpAnimationState extends State<FadeInUpAnimation>
     );
 
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(curve);
-    _translateAnimation = Tween<double>(begin: widget.distance, end: 0.0).animate(curve);
+    _translateAnimation =
+        Tween<double>(begin: widget.distance, end: 0.0).animate(curve);
 
     // Start animation with delay
     Future.delayed(Duration(milliseconds: (widget.delay * 1000).toInt()), () {

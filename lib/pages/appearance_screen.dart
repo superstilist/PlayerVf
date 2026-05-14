@@ -15,8 +15,8 @@ class AppearanceScreen extends StatelessWidget {
           backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: const Text('Appearance',
-                style: TextStyle(
-                    fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                style:
+                    TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0)),
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
@@ -217,7 +217,7 @@ class AppearanceScreen extends StatelessWidget {
             color: Colors.teal.withOpacity(0.8),
             fontWeight: FontWeight.w900,
             fontSize: 11,
-            letterSpacing: 2.0),
+            letterSpacing: 0),
       ),
     );
   }

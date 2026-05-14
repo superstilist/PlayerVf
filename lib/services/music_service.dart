@@ -18,6 +18,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   static const String _rememberPlaybackKey = 'remember_playback_enabled';
 
   List<Music> _musicList = [];
+  Music? _streamingMusic;
   int _currentIndex = 0;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
@@ -171,7 +172,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<Music> get musicList => _musicList;
-  Music? get currentMusic =>
+  Music? get currentMusic => _streamingMusic ?? _libraryCurrentMusic;
+  Music? get _libraryCurrentMusic =>
       _musicList.isNotEmpty && _currentIndex < _musicList.length
           ? _musicList[_currentIndex]
           : null;
@@ -202,8 +204,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
     final ext = currentMusic!.filePath.split('.').last.toLowerCase();
     // If it's a known audio format, it's music (even if it has an embedded cover art stream)
-    if (['mp3', 'm4a', 'flac', 'wav', 'ogg', 'aac', 'wma'].contains(ext))
+    if (['mp3', 'm4a', 'flac', 'wav', 'ogg', 'aac', 'wma'].contains(ext)) {
       return false;
+    }
 
     // If it's a known video format, it's video
     if (['mp4', 'mkv', 'webm', 'avi', 'mov'].contains(ext)) return true;
@@ -225,8 +228,11 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   bool get isInitialized => _isInitialized;
   bool get rememberPlayback => _rememberPlayback;
   bool get supportsPitchControl => _supportsPitchControl;
-  List<Music> get queueMusicList => _resolveMusicIds(_playbackOrderIds());
+  List<Music> get queueMusicList => _streamingMusic != null
+      ? [_streamingMusic!]
+      : _resolveMusicIds(_playbackOrderIds());
   int get currentQueuePosition {
+    if (_streamingMusic != null) return 0;
     final current = currentMusic;
     if (current == null) return -1;
     return _playbackOrderIds().indexOf(current.id);
@@ -467,6 +473,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> play() async {
+    if (_streamingMusic != null) {
+      await _playStreamingCurrent();
+      return;
+    }
     if (_musicList.isEmpty) return;
     _ensureQueueInitialized();
     try {
@@ -487,8 +497,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       // Smooth fade out before opening new track
-      if (_isPlaying)
+      if (_isPlaying) {
         await _fadeVolume(1.0, 0.0, const Duration(milliseconds: 250));
+      }
 
       final startPosition =
           (_shouldResumeCurrentTrack && _resumeTrackId == trackId)
@@ -530,6 +541,45 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _playStreamingCurrent() async {
+    final track = _streamingMusic;
+    if (track == null) return;
+
+    try {
+      final trackId = track.id;
+      if (_openedMusicId == trackId) {
+        await _player.play();
+        notifyListeners();
+        return;
+      }
+
+      if (_isPlaying) {
+        await _fadeVolume(1.0, 0.0, const Duration(milliseconds: 120));
+      }
+
+      _hasVideoTrack = false;
+      _position = Duration.zero;
+      _positionNotifier.value = Duration.zero;
+      _duration = track.duration ?? Duration.zero;
+      _durationNotifier.value = _duration;
+      await _player.open(Media(track.filePath), play: false);
+      _openedMusicId = trackId;
+
+      _player.setVolume(0);
+      await _player.play();
+      _fadeVolume(0.0, 1.0, const Duration(milliseconds: 180));
+
+      _resumeTrackId = trackId;
+      _resumePosition = Duration.zero;
+      _shouldResumeCurrentTrack = false;
+      _lastAppliedAf = null;
+      _scheduleUpdate();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Stream Play Error: $e');
+    }
+  }
+
   void togglePlayPause() {
     _togglePlayPauseInternal();
   }
@@ -562,7 +612,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     _resumeTrackId = currentMusic?.id;
     _resumePosition = position;
     _shouldResumeCurrentTrack = position > Duration.zero;
-    _savePlaybackDebounced();
+    if (_streamingMusic == null) {
+      _savePlaybackDebounced();
+    }
     notifyListeners();
   }
 
@@ -571,6 +623,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void next() {
+    if (_streamingMusic != null) return;
     _clearResumeState(keepOpenedTrack: false);
     if (_moveInQueue(1)) {
       play();
@@ -578,6 +631,10 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void previous() {
+    if (_streamingMusic != null) {
+      seekTo(Duration.zero);
+      return;
+    }
     if (_musicList.isEmpty) return;
     if (_position.inSeconds > 3) {
       seekTo(Duration.zero);
@@ -590,6 +647,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void toggleShuffle() {
+    if (_streamingMusic != null) return;
     _isShuffle = !_isShuffle;
     _rebuildShuffledQueue();
     _savePlaybackDebounced();
@@ -626,7 +684,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    final previousCurrentId = currentMusic?.id;
+    final previousCurrentId = _streamingMusic == null ? currentMusic?.id : null;
     if (clearExisting) {
       _musicList = [];
       _systemMusicCount = 0;
@@ -837,26 +895,18 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> playStreamingMusic(Music music) async {
-    final existingIndex = _musicList.indexWhere((item) => item.id == music.id);
-    if (existingIndex == -1) {
-      _musicList.add(music);
-      _systemMusicCount = _musicList.length;
-      _activeQueueIds.add(music.id);
-    } else {
-      _musicList[existingIndex] = music;
-    }
-
+    _streamingMusic = music;
     _currentPlaylistId = null;
-    _currentIndex = _musicList.indexWhere((item) => item.id == music.id);
     _activeQueueIds = [music.id];
     _shuffledQueueIds = [music.id];
     _clearResumeState(keepOpenedTrack: false);
     notifyListeners();
-    await play();
+    await _playStreamingCurrent();
   }
 
   void startQueue(List<Music> queue,
       {String? startMusicId, String? playlistId}) {
+    _streamingMusic = null;
     final ids = queue
         .map((music) => music.id)
         .where((id) => _musicList.any((track) => track.id == id))
@@ -880,6 +930,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void addToQueue(String musicId) {
+    if (_streamingMusic != null) return;
     if (!_musicList.any((music) => music.id == musicId)) return;
     _ensureQueueInitialized();
 
@@ -896,6 +947,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void removeFromQueue(String musicId) {
+    if (_streamingMusic != null) return;
     if (_activeQueueIds.length <= 1) return;
 
     final currentId = currentMusic?.id;
@@ -919,6 +971,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void moveQueueItem(int oldIndex, int newIndex) {
+    if (_streamingMusic != null) return;
     final order = _playbackOrderIds();
     if (order.isEmpty || oldIndex < 0 || oldIndex >= order.length) return;
     if (newIndex > order.length) newIndex = order.length;
@@ -1070,6 +1123,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _savePlaybackState() async {
     if (!_rememberPlayback) return;
+    if (_streamingMusic != null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final payload = {

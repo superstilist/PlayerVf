@@ -185,10 +185,12 @@ class YoutubeMusicService {
     try {
       final Map<dynamic, dynamic> response;
       if (usesNativeChannel) {
+        final outputDir = await _desktopDownloadDirectory();
+        final channelMap = result.toChannelMap()..['outputDir'] = outputDir;
         onProgress?.call(null, 'Starting download...');
         response = await platform.invokeMethod<Map<dynamic, dynamic>>(
               'downloadYoutubeMusic',
-              result.toChannelMap(),
+              channelMap,
             ) ??
             const {};
         onProgress?.call(1, 'Download finished.');
@@ -253,6 +255,10 @@ class YoutubeMusicService {
   }
 
   static Future<String> defaultYoutubeMusicDownloadDirectory() async {
+    if (Platform.isAndroid) {
+      return p.join('/storage', 'emulated', '0', 'Music');
+    }
+
     if (Platform.isWindows) {
       final userDir = Platform.environment['USERPROFILE'];
       if (userDir != null && userDir.isNotEmpty) {

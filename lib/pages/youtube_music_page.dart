@@ -7,6 +7,7 @@ import '../models/settings_model.dart';
 import '../services/music_service.dart';
 import '../services/responsive.dart';
 import '../services/youtube_music_service.dart';
+import '../widgets/cover_art_texture.dart';
 import '../widgets/glass_container.dart';
 
 class YoutubeMusicPage extends StatefulWidget {
@@ -18,7 +19,8 @@ class YoutubeMusicPage extends StatefulWidget {
   State<YoutubeMusicPage> createState() => _YoutubeMusicPageState();
 }
 
-class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
+class _YoutubeMusicPageState extends State<YoutubeMusicPage>
+    with AutomaticKeepAliveClientMixin {
   final YoutubeMusicService _service = YoutubeMusicService();
   final TextEditingController _controller = TextEditingController();
 
@@ -196,10 +198,11 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
             : null,
       );
 
-      await context.read<MusicService>().playStreamingMusic(music);
+      final playFuture = context.read<MusicService>().playStreamingMusic(music);
+      widget.onOpenPlayer?.call();
       if (!mounted) return;
       setState(() => _message = 'Playing ${stream.title}');
-      widget.onOpenPlayer?.call();
+      await playFuture;
     } on UnsupportedError catch (e) {
       if (mounted) setState(() => _message = e.message);
     } on MissingPluginException {
@@ -216,12 +219,18 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final settings = context.watch<SettingsModel>();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: CustomScrollView(
+        cacheExtent: 900,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         slivers: [
           SliverToBoxAdapter(child: SizedBox(height: 44.h)),
           SliverToBoxAdapter(child: _buildHeader(theme)),
@@ -268,13 +277,6 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
                 fontWeight: FontWeight.w900,
                 color: theme.colorScheme.onSurface),
           ),
-          SizedBox(height: 6.h),
-          Text(
-            'Search, stream, and download music into your PlayerVf library.',
-            style: TextStyle(
-                fontSize: 13.sp,
-                color: theme.colorScheme.onSurface.withOpacity(0.55)),
-          ),
         ],
       ),
     );
@@ -308,7 +310,6 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
                 IconButton.filled(
                   onPressed: _isSearching ? null : _search,
                   icon: const Icon(Icons.travel_explore_rounded),
-                  tooltip: 'Search',
                   style: IconButton.styleFrom(
                       backgroundColor: settings.accentColor,
                       foregroundColor: Colors.white),
@@ -383,7 +384,7 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
     ].join('  -  ');
 
     return GestureDetector(
-      onDoubleTap: isStreaming ? null : () => _stream(item),
+      onTap: isStreaming ? null : () => _stream(item),
       child: GlassContainer(
         margin: EdgeInsets.only(bottom: 10.h),
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
@@ -394,28 +395,12 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
           children: [
             Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12.s),
-                  child: SizedBox(
+                RepaintBoundary(
+                  child: CoverArtTexture(
+                    coverArtPath: item.thumbnailUrl,
                     width: 58.s,
                     height: 58.s,
-                    child: item.thumbnailUrl.isEmpty
-                        ? Container(
-                            color: settings.accentColor.withOpacity(0.12),
-                            child: Icon(Icons.music_note_rounded,
-                                color: settings.accentColor),
-                          )
-                        : Image.network(
-                            item.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.high,
-                            isAntiAlias: true,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: settings.accentColor.withOpacity(0.12),
-                              child: Icon(Icons.music_note_rounded,
-                                  color: settings.accentColor),
-                            ),
-                          ),
+                    borderRadius: BorderRadius.circular(12.s),
                   ),
                 ),
                 SizedBox(width: 14.w),
@@ -445,7 +430,6 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
                 ),
                 SizedBox(width: 8.w),
                 IconButton(
-                  tooltip: 'Play stream',
                   onPressed: isStreaming ? null : () => _stream(item),
                   icon: isStreaming
                       ? SizedBox(
@@ -457,7 +441,6 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
                   color: settings.accentColor,
                 ),
                 IconButton(
-                  tooltip: 'Download',
                   onPressed: isDownloading ? null : () => _download(item),
                   icon: isDownloading
                       ? SizedBox(
@@ -512,4 +495,7 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage> {
         ? item.videoId
         : '${item.resultType}:${item.browseId}:${item.title}';
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }

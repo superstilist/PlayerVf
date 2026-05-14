@@ -21,7 +21,8 @@ class VideoPage extends StatefulWidget {
   State<VideoPage> createState() => _VideoPageState();
 }
 
-class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMixin {
+class _VideoPageState extends State<VideoPage>
+    with SingleTickerProviderStateMixin {
   Future<CoverArtPalette>? _paletteFuture;
   String _palettePath = '';
   late AnimationController _rotationController;
@@ -86,7 +87,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                   child: RotatedBox(
                     quarterTurns: 1,
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 800),
+                      duration: const Duration(milliseconds: 260),
                       child: Text(
                         currentMusic?.title.toUpperCase() ?? 'PLAYERVF',
                         key: ValueKey(currentMusic?.id ?? 'bg-text'),
@@ -94,7 +95,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                           fontSize: 120.sp,
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.onSurface,
-                          letterSpacing: -5,
+                          letterSpacing: 0,
                         ),
                       ),
                     ),
@@ -107,17 +108,17 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                 child: Column(
                   children: [
                     _buildTopBar(context, currentMusic, palette),
-
                     Expanded(
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
-                        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 24.w, vertical: 12.h),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(height: 10.h),
                             _buildHeroVideo(musicService, settings),
-                            
+
                             SizedBox(height: 48.h),
 
                             // ── Metadata section ──
@@ -129,8 +130,9 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
 
                             SizedBox(height: 32.h),
 
-                            _buildQuickQueue(context, musicService, theme, palette),
-                            
+                            _buildQuickQueue(
+                                context, musicService, theme, palette),
+
                             SizedBox(height: 40.h),
                           ],
                         ),
@@ -146,7 +148,8 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildTopBar(BuildContext context, Music? music, CoverArtPalette palette) {
+  Widget _buildTopBar(
+      BuildContext context, Music? music, CoverArtPalette palette) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
       child: Row(
@@ -158,15 +161,16 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
           ),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 220),
               child: Text(
                 music?.album.toUpperCase() ?? 'VIDEO',
                 key: ValueKey(music?.album ?? 'none'),
                 style: TextStyle(
                   fontSize: 10.sp,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 2.5,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                  letterSpacing: 0,
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 1,
@@ -187,7 +191,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
     final controller = musicService.videoController;
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 280),
       child: Stack(
         key: ValueKey(musicService.currentMusic?.id ?? 'bg-none'),
         fit: StackFit.expand,
@@ -200,7 +204,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
             )
           else
             Container(color: Colors.black),
-          
+
           // Blur overlay for background video
           ClipRect(
             child: BackdropFilter(
@@ -288,7 +292,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
 
   Widget _buildMetadata(Music? music, ThemeData theme) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 260),
       child: Column(
         key: ValueKey(music?.id ?? 'none'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,7 +305,7 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
               fontWeight: FontWeight.w900,
               color: theme.colorScheme.onSurface,
               height: 1.1,
-              letterSpacing: -1,
+              letterSpacing: 0,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -322,7 +326,8 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildControlsSection(MusicService musicService, ThemeData theme, CoverArtPalette palette) {
+  Widget _buildControlsSection(
+      MusicService musicService, ThemeData theme, CoverArtPalette palette) {
     return GlassContainer(
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 24.h),
       borderRadius: BorderRadius.circular(40.s),
@@ -334,24 +339,29 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
             valueListenable: musicService.positionNotifier,
             builder: (context, position, child) {
               final duration = musicService.durationNotifier.value;
-              final progress = duration.inMilliseconds > 0 
-                  ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+              final progress = duration.inMilliseconds > 0
+                  ? (position.inMilliseconds / duration.inMilliseconds)
+                      .clamp(0.0, 1.0)
                   : 0.0;
               return Column(
                 children: [
                   SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 6.h,
-                      thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8.s),
+                      thumbShape:
+                          RoundSliderThumbShape(enabledThumbRadius: 8.s),
                       activeTrackColor: palette.accent,
-                      inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.08),
+                      inactiveTrackColor:
+                          theme.colorScheme.onSurface.withOpacity(0.08),
                       thumbColor: palette.accent,
                       overlayColor: palette.accent.withOpacity(0.15),
                     ),
                     child: Slider(
                       value: progress,
                       onChanged: (value) {
-                        final target = Duration(milliseconds: (value * duration.inMilliseconds).toInt());
+                        final target = Duration(
+                            milliseconds:
+                                (value * duration.inMilliseconds).toInt());
                         musicService.seekTo(target);
                       },
                     ),
@@ -361,8 +371,10 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(_formatDuration(position), style: _timeStyle(theme)),
-                        Text(_formatDuration(duration), style: _timeStyle(theme)),
+                        Text(_formatDuration(position),
+                            style: _timeStyle(theme)),
+                        Text(_formatDuration(duration),
+                            style: _timeStyle(theme)),
                       ],
                     ),
                   ),
@@ -370,17 +382,19 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
               );
             },
           ),
-          
           SizedBox(height: 24.h),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
                 iconSize: 24.s,
                 icon: Icon(
-                  musicService.isShuffle ? Icons.shuffle_on_rounded : Icons.shuffle_rounded,
-                  color: musicService.isShuffle ? palette.accent : theme.colorScheme.onSurface.withOpacity(0.4),
+                  musicService.isShuffle
+                      ? Icons.shuffle_on_rounded
+                      : Icons.shuffle_rounded,
+                  color: musicService.isShuffle
+                      ? palette.accent
+                      : theme.colorScheme.onSurface.withOpacity(0.4),
                 ),
                 onPressed: musicService.toggleShuffle,
               ),
@@ -402,7 +416,9 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                     valueListenable: musicService.playingNotifier,
                     builder: (context, isPlaying, child) {
                       return Icon(
-                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                         color: Colors.white,
                         size: 48.s,
                       );
@@ -418,16 +434,18 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
               IconButton(
                 iconSize: 24.s,
                 icon: Icon(
-                  musicService.isRepeatOne ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                  color: (musicService.isRepeatOne || musicService.isRepeatAll) ? palette.accent : theme.colorScheme.onSurface.withOpacity(0.4),
+                  musicService.isRepeatOne
+                      ? Icons.repeat_one_rounded
+                      : Icons.repeat_rounded,
+                  color: (musicService.isRepeatOne || musicService.isRepeatAll)
+                      ? palette.accent
+                      : theme.colorScheme.onSurface.withOpacity(0.4),
                 ),
                 onPressed: musicService.toggleRepeatMode,
               ),
             ],
           ),
-
           SizedBox(height: 24.h),
-          
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 20.w),
             child: ValueListenableBuilder<double>(
@@ -436,18 +454,26 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                 return Row(
                   children: [
                     Icon(
-                      volume == 0 ? Icons.volume_off_rounded : volume < 50 ? Icons.volume_down_rounded : Icons.volume_up_rounded,
-                      size: 20.s, 
+                      volume == 0
+                          ? Icons.volume_off_rounded
+                          : volume < 50
+                              ? Icons.volume_down_rounded
+                              : Icons.volume_up_rounded,
+                      size: 20.s,
                       color: theme.colorScheme.onSurface.withOpacity(0.3),
                     ),
                     Expanded(
                       child: SliderTheme(
                         data: SliderThemeData(
                           trackHeight: 4.h,
-                          thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.s),
-                          activeTrackColor: theme.colorScheme.onSurface.withOpacity(0.2),
-                          inactiveTrackColor: theme.colorScheme.onSurface.withOpacity(0.05),
-                          thumbColor: theme.colorScheme.onSurface.withOpacity(0.4),
+                          thumbShape:
+                              RoundSliderThumbShape(enabledThumbRadius: 6.s),
+                          activeTrackColor:
+                              theme.colorScheme.onSurface.withOpacity(0.2),
+                          inactiveTrackColor:
+                              theme.colorScheme.onSurface.withOpacity(0.05),
+                          thumbColor:
+                              theme.colorScheme.onSurface.withOpacity(0.4),
                           overlayColor: Colors.transparent,
                         ),
                         child: Slider(
@@ -481,7 +507,8 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildQuickQueue(BuildContext context, MusicService musicService, ThemeData theme, CoverArtPalette palette) {
+  Widget _buildQuickQueue(BuildContext context, MusicService musicService,
+      ThemeData theme, CoverArtPalette palette) {
     final queue = musicService.queueMusicList;
     if (queue.isEmpty) return const SizedBox.shrink();
 
@@ -495,17 +522,26 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
             children: [
               Text(
                 'Next Tracks',
-                style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w800, color: theme.colorScheme.onSurface),
+                style: TextStyle(
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface),
               ),
               TextButton(
-                onPressed: () => _showQueueSheet(context, musicService, theme, palette),
-                child: Text('Open Queue', style: TextStyle(color: palette.accent, fontWeight: FontWeight.bold)),
+                onPressed: () =>
+                    _showQueueSheet(context, musicService, theme, palette),
+                child: Text('Open Queue',
+                    style: TextStyle(
+                        color: palette.accent, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
         SizedBox(height: 12.h),
-        ...queue.skip(musicService.currentQueuePosition + 1).take(3).map((item) {
+        ...queue
+            .skip(musicService.currentQueuePosition + 1)
+            .take(3)
+            .map((item) {
           return GlassContainer(
             margin: EdgeInsets.only(bottom: 12.h),
             padding: EdgeInsets.all(16.s),
@@ -516,19 +552,33 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(14.s),
-                  child: CoverArtTexture(coverArtPath: item.coverPath, width: 54.s, height: 54.s),
+                  child: CoverArtTexture(
+                      coverArtPath: item.coverPath, width: 54.s, height: 54.s),
                 ),
                 SizedBox(width: 16.w),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text(item.artist, style: TextStyle(fontSize: 12.sp, color: theme.colorScheme.onSurface.withOpacity(0.4)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(item.title,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14.sp),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      Text(item.artist,
+                          style: TextStyle(
+                              fontSize: 12.sp,
+                              color:
+                                  theme.colorScheme.onSurface.withOpacity(0.4)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.playlist_play_rounded, size: 20), onPressed: () => musicService.playMusicFromQueue(musicService.queueMusicList, item)),
+                IconButton(
+                    icon: const Icon(Icons.playlist_play_rounded, size: 20),
+                    onPressed: () => musicService.playMusicFromQueue(
+                        musicService.queueMusicList, item)),
               ],
             ),
           );
@@ -538,7 +588,10 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
   }
 
   TextStyle _timeStyle(ThemeData theme) {
-    return TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface.withOpacity(0.4));
+    return TextStyle(
+        fontSize: 12.sp,
+        fontWeight: FontWeight.w600,
+        color: theme.colorScheme.onSurface.withOpacity(0.4));
   }
 
   String _formatDuration(Duration d) {
@@ -560,9 +613,21 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(leading: const Icon(Icons.equalizer_rounded), title: const Text('Audio Effects'), onTap: () { Navigator.pop(context); showAudioEffectsMenu(context); }),
-              ListTile(leading: const Icon(Icons.playlist_add_rounded), title: const Text('Add to Playlist'), onTap: () => Navigator.pop(context)),
-              ListTile(leading: const Icon(Icons.info_outline_rounded), title: const Text('Track Details'), onTap: () => Navigator.pop(context)),
+              ListTile(
+                  leading: const Icon(Icons.equalizer_rounded),
+                  title: const Text('Audio Effects'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    showAudioEffectsMenu(context);
+                  }),
+              ListTile(
+                  leading: const Icon(Icons.playlist_add_rounded),
+                  title: const Text('Add to Playlist'),
+                  onTap: () => Navigator.pop(context)),
+              ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text('Track Details'),
+                  onTap: () => Navigator.pop(context)),
               const SizedBox(height: 24),
             ],
           ),
@@ -571,13 +636,16 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
     );
   }
 
-  void _showQueueSheet(BuildContext context, MusicService musicService, ThemeData theme, CoverArtPalette palette) {
+  void _showQueueSheet(BuildContext context, MusicService musicService,
+      ThemeData theme, CoverArtPalette palette) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.85, minChildSize: 0.5, maxChildSize: 0.95,
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
         builder: (_, controller) => GlassContainer(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
           color: theme.colorScheme.surface.withOpacity(0.92),
@@ -585,7 +653,12 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
           child: Column(
             children: [
               const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: theme.colorScheme.onSurface.withOpacity(0.1), borderRadius: BorderRadius.circular(2))),
+              Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(2))),
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Row(
@@ -593,12 +666,20 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Up Next', style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w900)),
-                        Text('Drag tracks to reorder', style: TextStyle(fontSize: 12.sp, color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                        Text('Up Next',
+                            style: TextStyle(
+                                fontSize: 24.sp, fontWeight: FontWeight.w900)),
+                        Text('Drag tracks to reorder',
+                            style: TextStyle(
+                                fontSize: 12.sp,
+                                color: theme.colorScheme.onSurface
+                                    .withOpacity(0.5))),
                       ],
                     ),
                     const Spacer(),
-                    IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
+                    IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context)),
                   ],
                 ),
               ),
@@ -614,43 +695,55 @@ class _VideoPageState extends State<VideoPage> with SingleTickerProviderStateMix
                   itemBuilder: (context, index) {
                     final item = musicService.queueMusicList[index];
                     final isCurrent = musicService.currentMusic?.id == item.id;
-                    
+
                     return GlassContainer(
                       key: ValueKey(item.id),
                       margin: EdgeInsets.only(bottom: 8.h),
-                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
                       borderRadius: BorderRadius.circular(16),
-                      color: isCurrent ? palette.accent.withOpacity(0.1) : Colors.white.withOpacity(0.02),
+                      color: isCurrent
+                          ? palette.accent.withOpacity(0.1)
+                          : Colors.white.withOpacity(0.02),
                       blur: 5,
                       child: ListTile(
                         contentPadding: EdgeInsets.symmetric(horizontal: 12.w),
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: CoverArtTexture(coverArtPath: item.coverPath, width: 44, height: 44),
+                          child: CoverArtTexture(
+                              coverArtPath: item.coverPath,
+                              width: 44,
+                              height: 44),
                         ),
                         title: Text(
                           item.title,
                           style: TextStyle(
-                            fontWeight: isCurrent ? FontWeight.w900 : FontWeight.bold,
+                            fontWeight:
+                                isCurrent ? FontWeight.w900 : FontWeight.bold,
                             fontSize: 14.sp,
                             color: isCurrent ? palette.accent : null,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(item.artist, style: TextStyle(fontSize: 12.sp)),
+                        subtitle: Text(item.artist,
+                            style: TextStyle(fontSize: 12.sp)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (isCurrent) Icon(Icons.graphic_eq_rounded, color: palette.accent, size: 20),
+                            if (isCurrent)
+                              Icon(Icons.graphic_eq_rounded,
+                                  color: palette.accent, size: 20),
                             const SizedBox(width: 8),
                             ReorderableDragStartListener(
                               index: index,
-                              child: const Icon(Icons.drag_handle_rounded, color: Colors.white24),
+                              child: const Icon(Icons.drag_handle_rounded,
+                                  color: Colors.white24),
                             ),
                           ],
                         ),
-                        onTap: () => musicService.playMusicFromQueue(musicService.queueMusicList, item),
+                        onTap: () => musicService.playMusicFromQueue(
+                            musicService.queueMusicList, item),
                       ),
                     );
                   },

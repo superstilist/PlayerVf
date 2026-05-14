@@ -47,12 +47,6 @@ class AudioEffectsMenu extends StatelessWidget {
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Desktop-optimized equalizer and playback tuning',
-                            style:
-                                TextStyle(color: Colors.white54, fontSize: 12),
-                          ),
                         ],
                       ),
                     ),
@@ -103,10 +97,6 @@ class AudioEffectsMenu extends StatelessWidget {
                       child: CheckboxListTile(
                         title: const Text('Save for this song only',
                             style: TextStyle(color: Colors.white)),
-                        subtitle: const Text(
-                          'Keep a separate effect profile for the current track.',
-                          style: TextStyle(color: Colors.white54),
-                        ),
                         value: service.useSongSpecificSettings,
                         onChanged: service.isEffectsEnabled
                             ? (value) => service
@@ -132,8 +122,7 @@ class AudioEffectsMenu extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Playback Controls',
-              subtitle: 'Smooth tuning for speed, pitch, and space'),
+          _buildSectionHeader('Playback Controls'),
           const SizedBox(height: 14),
           _buildSlider(
             context,
@@ -192,8 +181,7 @@ class AudioEffectsMenu extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Quick Tone Profiles',
-              subtitle: 'One-click sound shaping'),
+          _buildSectionHeader('Quick Tone Profiles'),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
@@ -247,10 +235,7 @@ class AudioEffectsMenu extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _buildSectionHeader('Equalizer',
-                    subtitle: isDesktop
-                        ? 'Horizontal bands tuned for mouse control'
-                        : 'Frequency shaping'),
+                child: _buildSectionHeader('Equalizer'),
               ),
               TextButton.icon(
                 onPressed: service.resetEqualizer,
@@ -431,7 +416,7 @@ class AudioEffectsMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionHeader(String title, {String? subtitle}) {
+  Widget _buildSectionHeader(String title) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -441,15 +426,8 @@ class AudioEffectsMenu extends StatelessWidget {
               color: Colors.white,
               fontSize: 15,
               fontWeight: FontWeight.bold,
-              letterSpacing: 0.4),
+              letterSpacing: 0),
         ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-        ],
       ],
     );
   }

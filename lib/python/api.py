@@ -160,6 +160,24 @@ def download_best_cover(*entities: Optional[Dict[str, Any]]) -> Optional[Tuple[b
     return None
 
 
+def preview_thumbnail_url(*entities: Optional[Dict[str, Any]]) -> str:
+    """Return the best verified image URL for streaming preview artwork."""
+    import requests
+
+    for url in thumbnail_candidates(*entities):
+        for candidate in high_quality_thumbnail_urls(url):
+            try:
+                with requests.get(candidate, stream=True, timeout=8) as response:
+                    response.raise_for_status()
+                    content_type = (response.headers.get("content-type") or "").lower()
+                    chunk = next(response.iter_content(16), b"")
+                    if "image/" in content_type or detect_image_mime(chunk, candidate):
+                        return candidate
+            except Exception:
+                continue
+    return ""
+
+
 def best_thumbnail(entity: Dict[str, Any]) -> Optional[str]:
     """Return the highest-resolution thumbnail URL found in *entity*, or None."""
     candidates = thumbnail_candidates(entity)
@@ -951,8 +969,26 @@ def stream_youtube_music(item_json: Any) -> str:
         item_data = dict(item_json or {})
 
     item = _search_item_from_dict(item_data)
-    is_video = item.result_type == "video" or str(item_data.get("resultType") or "").lower() == "video"
+    result_type = str(item.result_type or item_data.get("resultType") or "").lower()
+    is_video = result_type == "video"
     video_id = item.video_id or item.raw.get("videoId")
+
+    if not video_id and result_type in ("album", "playlist", "featured_playlist", "community_playlist"):
+        downloader = MediaDownloader()
+        entity = downloader.get_entity_details(item)
+        tracks = (
+            downloader.get_album_tracks(entity)
+            if result_type == "album"
+            else downloader.get_playlist_tracks(entity)
+        )
+        first_track = next((track for track in tracks if track.get("videoId")), None)
+        if first_track:
+            video_id = first_track.get("videoId")
+            item.raw = first_track
+            title, artist, album, _ = downloader.extract_track_fields(first_track)
+            item.title = title or item.title
+            item.artist = artist or item.artist
+
     if not video_id:
         raise ValueError("This result cannot be streamed because it has no videoId.")
 
@@ -962,17 +998,25 @@ def stream_youtube_music(item_json: Any) -> str:
         "format": "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best" if is_video else "bestaudio[ext=m4a]/bestaudio/best",
         "quiet": True,
         "no_warnings": True,
+        "noplaylist": True,
         "skip_download": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
 
+    info_thumbnails = {"thumbnails": info.get("thumbnails") or [{"url": info.get("thumbnail", "")}]}
+    preview_thumb = (
+        item.thumbnail_url
+        or best_thumbnail(item.raw or {})
+        or best_thumbnail(info_thumbnails)
+        or info.get("thumbnail", "")
+    )
     payload = {
         "url": info.get("url", ""),
         "title": item.title or info.get("title", "YouTube Music"),
         "artist": item.artist or info.get("uploader", "YouTube Music"),
         "album": item.raw.get("album", {}).get("name", "") if isinstance(item.raw.get("album"), dict) else "",
-        "thumbnailUrl": item.thumbnail_url or info.get("thumbnail", ""),
+        "thumbnailUrl": preview_thumb,
         "durationSeconds": info.get("duration") or 0,
         "videoId": video_id,
         "isVideo": is_video,
