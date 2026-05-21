@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
@@ -14,7 +15,6 @@ class SettingsDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final musicService = context.watch<MusicService>();
     final settings = context.watch<SettingsModel>();
-    final theme = Theme.of(context);
 
     return Container(
       width: 320,
@@ -22,11 +22,11 @@ class SettingsDrawer extends StatelessWidget {
       color: Colors.transparent,
       child: GlassContainer(
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          bottomLeft: Radius.circular(24),
+          topLeft: Radius.circular(18),
+          bottomLeft: Radius.circular(18),
         ),
-        blur: 24,
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.70),
+        blur: 6,
+        color: null,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,7 +52,7 @@ class SettingsDrawer extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildSectionTitle('Audio'),
+                    _buildSectionTitle(context, 'Audio'),
                     _buildListTile(
                       context: context,
                       icon: Icons.equalizer_rounded,
@@ -63,7 +63,7 @@ class SettingsDrawer extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Interface'),
+                    _buildSectionTitle(context, 'Interface'),
                     _buildListTile(
                       context: context,
                       icon: Icons.palette_rounded,
@@ -78,7 +78,7 @@ class SettingsDrawer extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Playback'),
+                    _buildSectionTitle(context, 'Playback'),
                     SwitchListTile(
                       title: const Text('Remember playback',
                           style: TextStyle(fontSize: 14)),
@@ -87,23 +87,32 @@ class SettingsDrawer extends StatelessWidget {
                       onChanged: (v) => musicService.setRememberPlayback(v),
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Library'),
+                    _buildSectionTitle(context, 'Sharing'),
+                    SwitchListTile(
+                      title: const Text('Back up before sync',
+                          style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Save library backup on import'),
+                      value: settings.shareSyncBackupsEnabled,
+                      activeColor: settings.accentColor,
+                      onChanged: settings.setShareSyncBackupsEnabled,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionTitle(context, 'Library'),
                     ...settings.musicSourcePaths
                         .map((path) => _buildPathTile(context, settings, path)),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => _addPath(context, settings),
+                      onPressed: () =>
+                          _addPath(context, settings, musicService),
                       icon: const Icon(Icons.add_rounded),
                       label: const Text('Add Folder'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: settings.accentColor,
-                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('YouTube Music'),
+                    _buildSectionTitle(context, 'YouTube Music'),
                     _buildListTile(
                       context: context,
                       icon: Icons.download_rounded,
@@ -115,7 +124,7 @@ class SettingsDrawer extends StatelessWidget {
                           context, settings, musicService),
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('System'),
+                    _buildSectionTitle(context, 'System'),
                     _buildListTile(
                       context: context,
                       icon: Icons.refresh_rounded,
@@ -144,13 +153,13 @@ class SettingsDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, bottom: 12),
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.teal.shade300,
+          color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.w800,
           fontSize: 13,
         ),
@@ -187,7 +196,7 @@ class SettingsDrawer extends StatelessWidget {
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
-            .withOpacity(0.42),
+            .withOpacity(0.32),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -211,7 +220,18 @@ class SettingsDrawer extends StatelessWidget {
     );
   }
 
-  Future<void> _addPath(BuildContext context, SettingsModel settings) async {
+  Future<void> _addPath(
+    BuildContext context,
+    SettingsModel settings,
+    MusicService musicService,
+  ) async {
+    if (kIsWeb) {
+      final count = await musicService.importWebFolderMusic();
+      if (!context.mounted) return;
+      _showFolderImportMessage(context, count);
+      return;
+    }
+
     final path = await FilePicker.platform.getDirectoryPath();
     if (path != null) settings.addMusicPath(path);
   }
@@ -221,10 +241,38 @@ class SettingsDrawer extends StatelessWidget {
     SettingsModel settings,
     MusicService musicService,
   ) async {
+    if (kIsWeb) {
+      _showWebFolderMessage(context);
+      return;
+    }
+
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.isEmpty) return;
     await settings.setYoutubeMusicDownloadPath(path);
     await musicService.loadSystemMusic(
         customPaths: settings.musicSourcePaths, clearExisting: true);
+  }
+
+  void _showWebFolderMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content:
+            Text('Download folder selection is available in the desktop app.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showFolderImportMessage(BuildContext context, int count) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          count == 0
+              ? 'No supported media files were imported.'
+              : 'Imported $count media file${count == 1 ? '' : 's'} from the folder.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }

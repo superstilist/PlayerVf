@@ -27,13 +27,48 @@ class Music {
     this.playCount = 0,
     this.lastPlayed,
     DateTime? dateAdded,
-  }) : this.dateAdded = dateAdded ?? DateTime.now();
+  }) : dateAdded = dateAdded ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'playCount': playCount,
-    'lastPlayed': lastPlayed?.millisecondsSinceEpoch,
-  };
+        'id': id,
+        'title': title,
+        'artist': artist,
+        'album': album,
+        'filePath': filePath,
+        'coverPath': coverPath,
+        'genre': genre,
+        'durationMs': duration?.inMilliseconds,
+        'isFavorite': isFavorite,
+        'playCount': playCount,
+        'lastPlayed': lastPlayed?.millisecondsSinceEpoch,
+        'dateAdded': dateAdded.millisecondsSinceEpoch,
+      };
+
+  factory Music.fromJson(Map<String, dynamic> json) {
+    final durationMs = (json['durationMs'] as num?)?.toInt();
+    return Music(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Unknown title',
+      artist: json['artist']?.toString() ?? 'Unknown Artist',
+      album: json['album']?.toString() ?? 'Unknown Album',
+      filePath: json['filePath']?.toString() ?? '',
+      coverPath: json['coverPath']?.toString() ?? '',
+      genre: json['genre']?.toString() ?? 'Unknown',
+      duration: durationMs == null || durationMs <= 0
+          ? null
+          : Duration(milliseconds: durationMs),
+      isFavorite: json['isFavorite'] == true,
+      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      lastPlayed: (json['lastPlayed'] as num?) == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (json['lastPlayed'] as num).toInt()),
+      dateAdded: (json['dateAdded'] as num?) == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (json['dateAdded'] as num).toInt()),
+    );
+  }
 
   factory Music.fromBase(Music base, int playCount, DateTime? lastPlayed) {
     return Music(

@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -36,28 +37,50 @@ class SettingsScreen extends StatelessWidget {
             children: [
               _buildSectionTitle('Audio'),
               _buildGlassSettingCard(
-                child: ListTile(
-                  leading: Icon(Icons.equalizer_rounded,
-                      color: theme.colorScheme.primary),
-                  title: const Text('Audio Effects'),
-                  trailing:
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                  onTap: () => showAudioEffectsMenu(context),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.equalizer_rounded,
+                          color: theme.colorScheme.primary),
+                      title: const Text('Audio Effects'),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onTap: () => showAudioEffectsMenu(context),
+                    ),
+                    const Divider(height: 20),
+                    _buildDecoderModeRow(
+                      context,
+                      title: 'Audio decoder',
+                      value: settings.audioDecoderMode,
+                      onChanged: (mode) =>
+                          _setAudioDecoderMode(settings, musicService, mode),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Interface'),
               _buildGlassSettingCard(
-                child: ListTile(
-                  leading:
-                      Icon(Icons.palette_rounded, color: settings.accentColor),
-                  title: const Text('Appearance'),
-                  trailing:
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const AppearanceScreen())),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.palette_rounded,
+                          color: settings.accentColor),
+                      title: const Text('Appearance'),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const AppearanceScreen())),
+                    ),
+                    const Divider(height: 20),
+                    _buildPerformanceModeRow(context, settings),
+                    const SizedBox(height: 18),
+                    _buildBackgroundBlurRow(context, settings),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
@@ -129,14 +152,24 @@ class SettingsScreen extends StatelessWidget {
                       children: [5, 10, 15, 30].map((seconds) {
                         final selected = settings.seekStepSeconds == seconds;
                         return ChoiceChip(
-                          label: Text('$seconds sec'),
+                          label: Text(
+                            '$seconds sec',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           selected: selected,
                           onSelected: (_) =>
                               settings.setSeekStepSeconds(seconds),
-                          selectedColor: Colors.teal.withOpacity(0.2),
+                          selectedColor: theme.colorScheme.primaryContainer
+                              .withOpacity(0.68),
+                          backgroundColor: theme
+                              .colorScheme.surfaceContainerHighest
+                              .withOpacity(0.34),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          visualDensity: VisualDensity.compact,
                           labelStyle: TextStyle(
                             color: selected
-                                ? Colors.teal
+                                ? theme.colorScheme.onPrimaryContainer
                                 : theme.colorScheme.onSurface.withOpacity(0.8),
                             fontWeight: FontWeight.w600,
                           ),
@@ -144,6 +177,24 @@ class SettingsScreen extends StatelessWidget {
                       }).toList(),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildGlassSettingCard(
+                child: _buildSongGapSetting(context, settings, musicService),
+              ),
+              const SizedBox(height: 24),
+              _buildSectionTitle('Sharing'),
+              _buildGlassSettingCard(
+                child: SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: settings.accentColor,
+                  title: const Text('Back up before sync'),
+                  subtitle: const Text(
+                    'Save a library backup before importing shared songs.',
+                  ),
+                  value: settings.shareSyncBackupsEnabled,
+                  onChanged: settings.setShareSyncBackupsEnabled,
                 ),
               ),
               const SizedBox(height: 24),
@@ -159,7 +210,8 @@ class SettingsScreen extends StatelessWidget {
                         .map((path) => _buildPathTile(context, settings, path)),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => _addPath(context, settings),
+                      onPressed: () =>
+                          _addPath(context, settings, musicService),
                       icon: const Icon(Icons.add_rounded),
                       label: const Text('Add Folder'),
                     ),
@@ -280,9 +332,96 @@ class SettingsScreen extends StatelessWidget {
   Widget _buildGlassSettingCard({required Widget child}) {
     return GlassContainer(
       padding: const EdgeInsets.all(16),
-      borderRadius: BorderRadius.circular(18),
-      blur: 18,
+      borderRadius: BorderRadius.circular(16),
+      blur: 14,
       child: child,
+    );
+  }
+
+  Widget _buildSongGapSetting(
+    BuildContext context,
+    SettingsModel settings,
+    MusicService musicService,
+  ) {
+    final theme = Theme.of(context);
+    final seconds = settings.songGapMs / 1000.0;
+    final label = settings.songGapMs == 0
+        ? 'No empty time'
+        : '${seconds.toStringAsFixed(seconds % 1 == 0 ? 0 : 1)} sec';
+
+    Future<void> setGapMs(int milliseconds) async {
+      await settings.setSongGapMs(milliseconds);
+      await musicService.setSongGapDuration(
+        Duration(milliseconds: settings.songGapMs),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Empty time between songs',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Adds clean silence before the next track. Set to 0 for smooth crossfade.',
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.58),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Slider(
+          value: settings.songGapMs.toDouble(),
+          min: 0,
+          max: 5000,
+          divisions: 10,
+          label: label,
+          onChanged: (value) => setGapMs(value.round()),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: const [0, 500, 1000, 2000, 5000].map((milliseconds) {
+            final selected = settings.songGapMs == milliseconds;
+            final chipLabel = milliseconds == 0
+                ? 'Off'
+                : '${(milliseconds / 1000).toStringAsFixed(milliseconds % 1000 == 0 ? 0 : 1)}s';
+            return ChoiceChip(
+              label: Text(chipLabel),
+              selected: selected,
+              onSelected: (_) => setGapMs(milliseconds),
+              selectedColor:
+                  theme.colorScheme.primaryContainer.withOpacity(0.72),
+              backgroundColor:
+                  theme.colorScheme.surfaceContainerHighest.withOpacity(0.34),
+              labelStyle: TextStyle(
+                color: selected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              visualDensity: VisualDensity.compact,
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -295,7 +434,7 @@ class SettingsScreen extends StatelessWidget {
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
-            .withOpacity(0.42),
+            .withOpacity(0.32),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -316,7 +455,18 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _addPath(BuildContext context, SettingsModel settings) async {
+  Future<void> _addPath(
+    BuildContext context,
+    SettingsModel settings,
+    MusicService musicService,
+  ) async {
+    if (kIsWeb) {
+      final count = await musicService.importWebFolderMusic();
+      if (!context.mounted) return;
+      _showFolderImportMessage(context, count);
+      return;
+    }
+
     final path = await FilePicker.platform.getDirectoryPath();
     if (path != null) settings.addMusicPath(path);
   }
@@ -326,6 +476,11 @@ class SettingsScreen extends StatelessWidget {
     SettingsModel settings,
     MusicService musicService,
   ) async {
+    if (kIsWeb) {
+      _showWebFolderMessage(context);
+      return;
+    }
+
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.isEmpty) return;
     await settings.setYoutubeMusicDownloadPath(path);
@@ -342,6 +497,29 @@ class SettingsScreen extends StatelessWidget {
     await settings.setYoutubeMusicDownloadPath(path);
     await musicService.loadSystemMusic(
         customPaths: settings.musicSourcePaths, clearExisting: true);
+  }
+
+  void _showWebFolderMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content:
+            Text('Download folder selection is available in the desktop app.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showFolderImportMessage(BuildContext context, int count) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          count == 0
+              ? 'No supported media files were imported.'
+              : 'Imported $count media file${count == 1 ? '' : 's'} from the folder.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Widget _buildVideoSettingsCard(
@@ -396,8 +574,205 @@ class SettingsScreen extends StatelessWidget {
               onChanged: isVideo ? settings.setVideoDoubleTapFullscreen : null,
             ),
           ),
+          const Divider(height: 8),
+          _buildDecoderModeRow(
+            context,
+            title: 'Video decoder',
+            value: settings.videoDecoderMode,
+            onChanged: (mode) =>
+                _setVideoDecoderMode(settings, musicService, mode),
+          ),
+          const Divider(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.subtitles_rounded),
+            title: const Text('Open subtitles'),
+            subtitle: const Text('SRT, VTT, ASS, SSA'),
+            onTap: () => _pickSubtitleFile(context, musicService),
+            trailing: IconButton(
+              tooltip: 'Disable subtitles',
+              icon: const Icon(Icons.closed_caption_disabled_rounded),
+              onPressed: musicService.disableSubtitles,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDecoderModeRow(
+    BuildContext context, {
+    required String title,
+    required DecoderMode value,
+    required ValueChanged<DecoderMode> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        SegmentedButton<DecoderMode>(
+          segments: const [
+            ButtonSegment(
+              value: DecoderMode.auto,
+              icon: Icon(Icons.auto_mode_rounded),
+              label: Text('Auto'),
+            ),
+            ButtonSegment(
+              value: DecoderMode.software,
+              icon: Icon(Icons.memory_rounded),
+              label: Text('Soft'),
+            ),
+            ButtonSegment(
+              value: DecoderMode.hardware,
+              icon: Icon(Icons.developer_board_rounded),
+              label: Text('Hardware'),
+            ),
+          ],
+          selected: {value},
+          onSelectionChanged: (next) => onChanged(next.first),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPerformanceModeRow(
+      BuildContext context, SettingsModel settings) {
+    final theme = Theme.of(context);
+    const labels = {
+      PerformanceMode.auto: 'Auto',
+      PerformanceMode.quality: 'Quality',
+      PerformanceMode.balanced: 'Balanced',
+      PerformanceMode.batterySaver: 'Battery',
+      PerformanceMode.maxPerformance: 'Max FPS',
+    };
+    const icons = {
+      PerformanceMode.auto: Icons.auto_awesome_rounded,
+      PerformanceMode.quality: Icons.high_quality_rounded,
+      PerformanceMode.balanced: Icons.speed_rounded,
+      PerformanceMode.batterySaver: Icons.battery_saver_rounded,
+      PerformanceMode.maxPerformance: Icons.rocket_launch_rounded,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Performance mode',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text(
+          'Controls GPU-heavy blur, particles, cover quality, and animation cost.',
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.58),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: PerformanceMode.values.map((mode) {
+            final selected = settings.performanceMode == mode;
+            return ChoiceChip(
+              avatar: Icon(
+                icons[mode],
+                size: 16,
+                color: selected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              label: Text(labels[mode]!),
+              selected: selected,
+              onSelected: (_) => settings.setPerformanceMode(mode),
+              selectedColor:
+                  theme.colorScheme.primaryContainer.withOpacity(0.72),
+              backgroundColor:
+                  theme.colorScheme.surfaceContainerHighest.withOpacity(0.34),
+              labelStyle: TextStyle(
+                color: selected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              visualDensity: VisualDensity.compact,
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBackgroundBlurRow(BuildContext context, SettingsModel settings) {
+    final theme = Theme.of(context);
+    final percent = (settings.backgroundBlurScale * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.blur_on_rounded,
+                size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Background blur',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Text(
+              '$percent%',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.64),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: settings.backgroundBlurScale,
+          min: 0,
+          max: 2.5,
+          divisions: 25,
+          label: '$percent%',
+          onChanged: settings.setBackgroundBlurScale,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _setAudioDecoderMode(
+    SettingsModel settings,
+    MusicService musicService,
+    DecoderMode mode,
+  ) async {
+    await settings.setAudioDecoderMode(mode);
+    await musicService.setDecoderModes(
+      audio: settings.audioDecoderMode,
+      video: settings.videoDecoderMode,
+    );
+  }
+
+  Future<void> _setVideoDecoderMode(
+    SettingsModel settings,
+    MusicService musicService,
+    DecoderMode mode,
+  ) async {
+    await settings.setVideoDecoderMode(mode);
+    await musicService.setDecoderModes(
+      audio: settings.audioDecoderMode,
+      video: settings.videoDecoderMode,
+    );
+  }
+
+  Future<void> _pickSubtitleFile(
+      BuildContext context, MusicService musicService) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['srt', 'vtt', 'ass', 'ssa'],
+      withData: false,
+    );
+    final path = result?.files.single.path;
+    if (path == null || path.isEmpty) return;
+    await musicService.loadSubtitleFile(path);
   }
 }

@@ -24,6 +24,7 @@ class PlaylistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsModel>(context);
     final musicService = Provider.of<MusicService>(context);
+    final theme = Theme.of(context);
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
 
     return GestureDetector(
@@ -32,10 +33,10 @@ class PlaylistCard extends StatelessWidget {
           _showGlassContextMenu(context, details.globalPosition),
       onLongPress: () => _showGlassContextMenuFromLongPress(context),
       child: GlassContainer(
-        borderRadius: BorderRadius.circular(settings.borderRadius.s + 8),
+        borderRadius: BorderRadius.circular(18.s),
         padding: EdgeInsets.all(12.s),
-        color: Colors.white.withOpacity(0.05),
-        blur: 10,
+        color: null,
+        blur: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -43,13 +44,6 @@ class PlaylistCard extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(settings.borderRadius.s),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(settings.borderRadius.s),
@@ -63,14 +57,16 @@ class PlaylistCard extends StatelessWidget {
               style: TextStyle(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white),
+                  color: theme.colorScheme.onSurface),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 2.h),
             Text(
               '${musicList.length} Tracks',
-              style: TextStyle(fontSize: 10.sp, color: Colors.white54),
+              style: TextStyle(
+                  fontSize: 10.sp,
+                  color: theme.colorScheme.onSurface.withOpacity(0.56)),
             ),
           ],
         ),
@@ -108,10 +104,17 @@ class PlaylistCard extends StatelessWidget {
   }
 
   Widget _buildSingleSongCover(String coverPath) {
-    return CoverArtTexture(
-        coverArtPath: coverPath,
-        width: double.infinity,
-        height: double.infinity);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return CoverArtTexture(
+          coverArtPath: coverPath,
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+          filterQuality: FilterQuality.medium,
+          cacheScale: 2.0,
+        );
+      },
+    );
   }
 
   Widget _buildMultipleSongsCover(List<Music> musicList) {
@@ -123,14 +126,20 @@ class PlaylistCard extends StatelessWidget {
             children: [
               Expanded(
                   child: CoverArtTexture(
-                      coverArtPath: musicList[0].coverPath,
-                      width: halfWidth,
-                      height: double.infinity)),
+                coverArtPath: musicList[0].coverPath,
+                width: halfWidth,
+                height: constraints.maxHeight,
+                filterQuality: FilterQuality.medium,
+                cacheScale: 2.0,
+              )),
               Expanded(
                   child: CoverArtTexture(
-                      coverArtPath: musicList[1].coverPath,
-                      width: halfWidth,
-                      height: double.infinity)),
+                coverArtPath: musicList[1].coverPath,
+                width: halfWidth,
+                height: constraints.maxHeight,
+                filterQuality: FilterQuality.medium,
+                cacheScale: 2.0,
+              )),
             ],
           );
         }
@@ -144,12 +153,16 @@ class PlaylistCard extends StatelessWidget {
                       child: CoverArtTexture(
                           coverArtPath: musicList[0].coverPath,
                           width: halfWidth,
-                          height: double.infinity)),
+                          height: constraints.maxHeight / 2,
+                          filterQuality: FilterQuality.medium,
+                          cacheScale: 2.0)),
                   Expanded(
                       child: CoverArtTexture(
                           coverArtPath: musicList[1].coverPath,
                           width: halfWidth,
-                          height: double.infinity)),
+                          height: constraints.maxHeight / 2,
+                          filterQuality: FilterQuality.medium,
+                          cacheScale: 2.0)),
                 ],
               ),
             ),
@@ -160,12 +173,16 @@ class PlaylistCard extends StatelessWidget {
                       child: CoverArtTexture(
                           coverArtPath: musicList[2].coverPath,
                           width: halfWidth,
-                          height: double.infinity)),
+                          height: constraints.maxHeight / 2,
+                          filterQuality: FilterQuality.medium,
+                          cacheScale: 2.0)),
                   Expanded(
                       child: CoverArtTexture(
                           coverArtPath: musicList[3].coverPath,
                           width: halfWidth,
-                          height: double.infinity)),
+                          height: constraints.maxHeight / 2,
+                          filterQuality: FilterQuality.medium,
+                          cacheScale: 2.0)),
                 ],
               ),
             ),

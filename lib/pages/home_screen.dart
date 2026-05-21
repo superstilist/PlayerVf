@@ -1,4 +1,3 @@
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +5,7 @@ import '../models/music_model.dart';
 import '../models/playlist_model.dart';
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
+import '../services/performance_policy.dart';
 import '../services/responsive.dart';
 import '../widgets/cover_art_texture.dart';
 import '../widgets/music_card.dart';
@@ -14,8 +14,13 @@ import 'playlist_detail_page.dart';
 
 class HomeScreen extends StatelessWidget {
   final String searchQuery;
+  final VoidCallback? onOpenPlayer;
 
-  const HomeScreen({super.key, this.searchQuery = ''});
+  const HomeScreen({
+    super.key,
+    this.searchQuery = '',
+    this.onOpenPlayer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,28 +34,41 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildResponsiveLayout(BuildContext context, MusicService musicService, SettingsModel settings) {
+  Widget _buildResponsiveLayout(
+      BuildContext context, MusicService musicService, SettingsModel settings) {
     final theme = Theme.of(context);
+    final performance = PerformancePolicy.of(context);
+    final listItemExtent =
+        ((64 * (settings.cardSize / 140.0)).clamp(48.0, 100.0) + 1).h;
     int crossAxisCount;
     if (settings.useAutoCardCount) {
-      crossAxisCount = _calculateAutoCrossAxisCount(Responsive.screenWidth, settings.cardSize, settings.cardMargins);
+      crossAxisCount = _calculateAutoCrossAxisCount(
+          Responsive.screenWidth, settings.cardSize, settings.cardMargins);
     } else {
       crossAxisCount = settings.cardCount;
     }
     if (crossAxisCount < 1) crossAxisCount = 1;
 
-    if (musicService.isLoadingSystemMusic) {
+    if (musicService.isLoadingSystemMusic && musicService.musicList.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: Colors.teal));
     }
 
-    final filteredMusic = musicService.musicList.where((music) {
-      return music.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          music.artist.toLowerCase().contains(searchQuery.toLowerCase());
-    }).toList();
+    final normalizedQuery = searchQuery.trim().toLowerCase();
+    final allMusic = musicService.musicList;
+    final indexById = <String, int>{
+      for (var i = 0; i < allMusic.length; i++) allMusic[i].id: i,
+    };
+    final filteredMusic = normalizedQuery.isEmpty
+        ? allMusic
+        : allMusic.where((music) {
+            return music.title.toLowerCase().contains(normalizedQuery) ||
+                music.artist.toLowerCase().contains(normalizedQuery);
+          }).toList(growable: false);
 
-    final isSearching = searchQuery.isNotEmpty;
+    final isSearching = normalizedQuery.isNotEmpty;
 
     return CustomScrollView(
+      cacheExtent: performance.listCacheExtent,
       slivers: [
         SliverToBoxAdapter(child: SizedBox(height: isSearching ? 40 : 60)),
         if (!isSearching) ...[
@@ -61,10 +79,30 @@ class HomeScreen extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.symmetric(horizontal: 16.w),
                 children: [
-                  _buildSquarePlaylistCard(context, musicService, musicService.systemPlaylists[3], Icons.auto_awesome_rounded, Colors.tealAccent),
-                  _buildSquarePlaylistCard(context, musicService, musicService.systemPlaylists[1], Icons.trending_up_rounded, Colors.purpleAccent),
-                  _buildSquarePlaylistCard(context, musicService, musicService.systemPlaylists[2], Icons.access_time_rounded, Colors.blueAccent),
-                  _buildSquarePlaylistCard(context, musicService, musicService.systemPlaylists[0], Icons.favorite_rounded, Colors.redAccent),
+                  _buildSquarePlaylistCard(
+                      context,
+                      musicService,
+                      musicService.systemPlaylists[3],
+                      Icons.auto_awesome_rounded,
+                      Colors.tealAccent),
+                  _buildSquarePlaylistCard(
+                      context,
+                      musicService,
+                      musicService.systemPlaylists[1],
+                      Icons.trending_up_rounded,
+                      Colors.purpleAccent),
+                  _buildSquarePlaylistCard(
+                      context,
+                      musicService,
+                      musicService.systemPlaylists[2],
+                      Icons.access_time_rounded,
+                      Colors.blueAccent),
+                  _buildSquarePlaylistCard(
+                      context,
+                      musicService,
+                      musicService.systemPlaylists[0],
+                      Icons.favorite_rounded,
+                      Colors.redAccent),
                   _buildAddPlaylistSquare(context, musicService),
                   ...musicService.playlists.map(
                     (playlist) => _buildSquarePlaylistCard(
@@ -91,11 +129,13 @@ class HomeScreen extends StatelessWidget {
         ],
         SliverPadding(
           padding: EdgeInsets.symmetric(
-            horizontal: settings.viewMode == ViewMode.list ? 0 : settings.cardMargins.w,
+            horizontal:
+                settings.viewMode == ViewMode.list ? 0 : settings.cardMargins.w,
             vertical: settings.cardMargins.h,
           ),
           sliver: filteredMusic.isEmpty
-              ? SliverToBoxAdapter(child: _buildEmptyState(context, musicService, isSearching))
+              ? SliverToBoxAdapter(
+                  child: _buildEmptyState(context, musicService, isSearching))
               : settings.viewMode == ViewMode.card
                   ? SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -107,29 +147,41 @@ class HomeScreen extends StatelessWidget {
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           final music = filteredMusic[index];
-                          final actualIndex = musicService.musicList.indexWhere((item) => item.id == music.id);
+                          final actualIndex = indexById[music.id] ?? -1;
                           return MusicCard(
                             music: music,
                             viewMode: settings.viewMode,
                             heroPrefix: 'home-${settings.viewMode}',
-                            onTap: () => musicService.playMusicFromQueue(filteredMusic, music),
-                            onDelete: actualIndex == -1 ? null : () => musicService.deleteMusic(actualIndex),
+                            listIndex: index,
+                            onTap: () => musicService.playMusicFromQueue(
+                                filteredMusic, music),
+                            onOpen: onOpenPlayer,
+                            onDelete: actualIndex == -1
+                                ? null
+                                : () => musicService.deleteMusic(actualIndex),
                           );
                         },
                         childCount: filteredMusic.length,
                       ),
                     )
-                  : SliverList(
+                  : SliverFixedExtentList(
+                      itemExtent: listItemExtent,
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           final music = filteredMusic[index];
-                          final actualIndex = musicService.musicList.indexWhere((item) => item.id == music.id);
+                          final actualIndex = indexById[music.id] ?? -1;
                           return MusicCard(
                             music: music,
                             viewMode: settings.viewMode,
                             heroPrefix: 'home-${settings.viewMode}',
-                            onTap: () => musicService.playMusicFromQueue(filteredMusic, music),
-                            onDelete: actualIndex == -1 ? null : () => musicService.deleteMusic(actualIndex),
+                            listIndex: index,
+                            listLength: filteredMusic.length,
+                            onTap: () => musicService.playMusicFromQueue(
+                                filteredMusic, music),
+                            onOpen: onOpenPlayer,
+                            onDelete: actualIndex == -1
+                                ? null
+                                : () => musicService.deleteMusic(actualIndex),
                           );
                         },
                         childCount: filteredMusic.length,
@@ -141,29 +193,42 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSquarePlaylistCard(BuildContext context, MusicService musicService, Playlist playlist, IconData icon, Color color) {
+  Widget _buildSquarePlaylistCard(
+      BuildContext context,
+      MusicService musicService,
+      Playlist playlist,
+      IconData icon,
+      Color color) {
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PlaylistDetailPage(playlist: playlist))),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => PlaylistDetailPage(
+                    playlist: playlist,
+                    onOpenPlayer: onOpenPlayer,
+                  ))),
       child: Container(
         width: 180.s,
         margin: EdgeInsets.only(right: 16.w),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final artworkSize = (constraints.maxHeight - 42.h).clamp(110.0, 180.s.toDouble());
+            final artworkSize =
+                (constraints.maxHeight - 42.h).clamp(110.0, 180.s.toDouble());
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 GlassContainer(
                   width: artworkSize,
                   height: artworkSize,
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(28.s),
-                  blur: 0.0,
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(22.s),
+                  blur: 12,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28.s),
+                    borderRadius: BorderRadius.circular(22.s),
                     child: _buildPlaylistCollage(musicList, icon, color),
                   ),
                 ),
@@ -172,7 +237,8 @@ class HomeScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: 8.w),
                   child: Text(
                     playlist.name,
-                    style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.bold),
+                    style:
+                        TextStyle(fontSize: 14.sp, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -185,8 +251,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaylistCollage(List<Music> musicList, IconData icon, Color color) {
-    final musicWithCovers = musicList.where((music) => music.coverPath.isNotEmpty).toList();
+  Widget _buildPlaylistCollage(
+      List<Music> musicList, IconData icon, Color color) {
+    final musicWithCovers =
+        musicList.where((music) => music.coverPath.isNotEmpty).toList();
 
     if (musicWithCovers.isEmpty) {
       return Container(
@@ -197,7 +265,8 @@ class HomeScreen extends StatelessWidget {
             colors: [color.withOpacity(0.2), Colors.black12],
           ),
         ),
-        child: Center(child: Icon(icon, color: color.withOpacity(0.5), size: 60.s)),
+        child: Center(
+            child: Icon(icon, color: color.withOpacity(0.5), size: 60.s)),
       );
     }
 
@@ -219,19 +288,17 @@ class HomeScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Image.file(
-                      io.File(musicWithCovers[0].coverPath),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[0].coverPath, width: double.infinity, height: double.infinity),
+                    child: CoverArtTexture(
+                      coverArtPath: musicWithCovers[0].coverPath,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                   ),
                   Expanded(
-                    child: Image.file(
-                      io.File(musicWithCovers[1].coverPath),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[1].coverPath, width: double.infinity, height: double.infinity),
+                    child: CoverArtTexture(
+                      coverArtPath: musicWithCovers[1].coverPath,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                   ),
                 ],
@@ -241,19 +308,17 @@ class HomeScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Image.file(
-                      io.File(musicWithCovers[2].coverPath),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[2].coverPath, width: double.infinity, height: double.infinity),
+                    child: CoverArtTexture(
+                      coverArtPath: musicWithCovers[2].coverPath,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                   ),
                   Expanded(
-                    child: Image.file(
-                      io.File(musicWithCovers[3].coverPath),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (_, __, ___) => CoverArtTexture(coverArtPath: musicWithCovers[3].coverPath, width: double.infinity, height: double.infinity),
+                    child: CoverArtTexture(
+                      coverArtPath: musicWithCovers[3].coverPath,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                   ),
                 ],
@@ -275,7 +340,8 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAddPlaylistSquare(BuildContext context, MusicService musicService) {
+  Widget _buildAddPlaylistSquare(
+      BuildContext context, MusicService musicService) {
     final theme = Theme.of(context);
     return GestureDetector(
       onTap: () => _showCreatePlaylistDialog(context, musicService),
@@ -284,24 +350,31 @@ class HomeScreen extends StatelessWidget {
         margin: EdgeInsets.only(right: 16.w),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final artworkSize = (constraints.maxHeight - 42.h).clamp(110.0, 180.s.toDouble());
+            final artworkSize =
+                (constraints.maxHeight - 42.h).clamp(110.0, 180.s.toDouble());
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 GlassContainer(
                   width: artworkSize,
                   height: artworkSize,
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(28.s),
-                  blur: 0.0,
-                  child: Center(child: Icon(Icons.add_rounded, color: Colors.teal, size: 60.s)),
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(22.s),
+                  blur: 12,
+                  child: Center(
+                      child: Icon(Icons.add_rounded,
+                          color: Colors.teal, size: 60.s)),
                 ),
                 SizedBox(height: 10.h),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8.w),
                   child: Text(
                     'New List',
-                    style: TextStyle(color: Colors.teal, fontSize: 14.sp, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.teal,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -312,7 +385,8 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _showCreatePlaylistDialog(BuildContext context, MusicService musicService) {
+  void _showCreatePlaylistDialog(
+      BuildContext context, MusicService musicService) {
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -323,11 +397,14 @@ class HomeScreen extends StatelessWidget {
           autofocus: true,
           decoration: const InputDecoration(
             hintText: 'Name...',
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal)),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.teal)),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               if (controller.text.isNotEmpty) {
@@ -342,7 +419,8 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, MusicService musicService, bool isSearching) {
+  Widget _buildEmptyState(
+      BuildContext context, MusicService musicService, bool isSearching) {
     final theme = Theme.of(context);
     if (isSearching) {
       return Center(
@@ -350,20 +428,28 @@ class HomeScreen extends StatelessWidget {
           padding: EdgeInsets.only(top: 50.h),
           child: Column(
             children: [
-              Icon(Icons.search_off_rounded, color: theme.colorScheme.onSurface.withOpacity(0.2), size: 64.s),
+              Icon(Icons.search_off_rounded,
+                  color: theme.colorScheme.onSurface.withOpacity(0.2),
+                  size: 64.s),
               SizedBox(height: 16.h),
-              Text('No songs found', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.2), fontSize: 16.sp)),
+              Text('No songs found',
+                  style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      fontSize: 16.sp)),
             ],
           ),
         ),
       );
     }
     return Center(
-      child: ElevatedButton(onPressed: musicService.loadSystemMusic, child: const Text('Scan Music')),
+      child: ElevatedButton(
+          onPressed: musicService.loadSystemMusic,
+          child: const Text('Scan Music')),
     );
   }
 
-  int _calculateAutoCrossAxisCount(double screenWidth, double cardSize, double margin) {
+  int _calculateAutoCrossAxisCount(
+      double screenWidth, double cardSize, double margin) {
     final availableWidth = screenWidth - (margin * 2);
     final count = (availableWidth / (cardSize + margin)).floor();
     return count < 1 ? 1 : count;

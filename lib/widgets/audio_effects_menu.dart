@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/settings_model.dart';
 import '../services/music_service.dart';
 import '../services/responsive.dart';
 
@@ -11,533 +12,814 @@ class AudioEffectsMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MusicService>(
       builder: (context, service, _) {
+        final theme = Theme.of(context);
+        final glass = context.select<SettingsModel, double>(
+          (settings) => settings.glassEffect.clamp(0.0, 1.0),
+        );
+        final isDesktop = Responsive.isDesktop;
         final freqs = service.getEqualizerFrequencies();
         final presets = service.getEqualizerPresets();
-        final isDesktop = Responsive.isDesktop;
+        final viewport = MediaQuery.sizeOf(context);
 
-        return Container(
-          width: isDesktop ? 760 : double.infinity,
-          height: isDesktop ? 700 : MediaQuery.of(context).size.height * 0.82,
-          decoration: BoxDecoration(
-            color: const Color(0xFF101214).withOpacity(0.98),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.teal.withOpacity(0.22)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.45),
-                blurRadius: 28,
-                spreadRadius: 4,
+        return SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isDesktop ? 900 : double.infinity,
+                maxHeight: isDesktop ? 760 : viewport.height * 0.88,
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Audio Effects',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Material(
+                  color: _glassSurfaceColor(theme, glass),
+                  child: Column(
+                    children: [
+                      _Header(service: service),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.all(18),
+                          children: [
+                            if (isDesktop)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                      child: _PlaybackCard(service: service)),
+                                  const SizedBox(width: 14),
+                                  Expanded(child: _ToneCard(service: service)),
+                                ],
+                              )
+                            else ...[
+                              _PlaybackCard(service: service),
+                              const SizedBox(height: 14),
+                              _ToneCard(service: service),
+                            ],
+                            const SizedBox(height: 14),
+                            _EqualizerCard(
+                              service: service,
+                              freqs: freqs,
+                              presets: presets,
+                            ),
+                            const SizedBox(height: 14),
+                            _SongScopeTile(service: service),
+                          ],
+                        ),
                       ),
-                    ),
-                    TextButton.icon(
-                      onPressed: service.resetAudioEffects,
-                      icon: const Icon(Icons.restart_alt_rounded,
-                          color: Colors.tealAccent),
-                      label: const Text('Reset All',
-                          style: TextStyle(color: Colors.tealAccent)),
-                    ),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: service.isEffectsEnabled,
-                      onChanged: service.setEffectsEnabled,
-                      activeColor: Colors.tealAccent,
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(color: Colors.white10, height: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(18),
-                  children: [
-                    if (isDesktop)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _buildDspCard(context, service),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildQuickTonesCard(context, service),
-                          ),
-                        ],
-                      )
-                    else ...[
-                      _buildDspCard(context, service),
-                      const SizedBox(height: 16),
-                      _buildQuickTonesCard(context, service),
                     ],
-                    const SizedBox(height: 18),
-                    _buildEqCard(context, service, freqs, presets, isDesktop),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: CheckboxListTile(
-                        title: const Text('Save for this song only',
-                            style: TextStyle(color: Colors.white)),
-                        value: service.useSongSpecificSettings,
-                        onChanged: service.isEffectsEnabled
-                            ? (value) => service
-                                .setUseSongSpecificSettings(value ?? false)
-                            : null,
-                        activeColor: Colors.teal,
-                        checkColor: Colors.black,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
+}
 
-  Widget _buildDspCard(BuildContext context, MusicService service) {
-    return _sectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+class _Header extends StatelessWidget {
+  final MusicService service;
+
+  const _Header({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 14, 14),
+      child: Row(
         children: [
-          _buildSectionHeader('Playback Controls'),
-          const SizedBox(height: 14),
-          _buildSlider(
-            context,
-            label: 'Speed',
-            value: service.speed,
-            min: 0.5,
-            max: 2.0,
-            onChanged: service.setSpeed,
-            displayValue: '${service.speed.toStringAsFixed(2)}x',
-          ),
-          const SizedBox(height: 10),
-          _buildSlider(
-            context,
-            label: 'Pitch',
-            value: service.pitch,
-            min: 0.5,
-            max: 2.0,
-            onChanged: service.setPitch,
-            displayValue: service.supportsPitchControl
-                ? '${service.pitch.toStringAsFixed(2)}x'
-                : 'Unavailable on this device',
-            enabledOverride: service.supportsPitchControl,
-          ),
-          const SizedBox(height: 10),
-          _buildSlider(
-            context,
-            label: 'Reverb',
-            value: service.reverb,
-            min: 0.0,
-            max: 1.0,
-            onChanged: service.setReverb,
-            displayValue: service.reverb > 0.8
-                ? 'Large Hall'
-                : '${(service.reverb * 100).toInt()}%',
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _quickButton('0.9x', () => service.setSpeed(0.9)),
-              _quickButton('1.0x', () => service.setSpeed(1.0)),
-              _quickButton('1.1x', () => service.setSpeed(1.1)),
-              _quickButton('Dry', () => service.setReverb(0.0)),
-              _quickButton('Room', () => service.setReverb(0.35)),
-              _quickButton('Wide', () => service.setReverb(0.7)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickTonesCard(BuildContext context, MusicService service) {
-    return _sectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Quick Tone Profiles'),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _toneButton('Balanced', service, () {
-                service.setEqualizerPreset('Normal');
-                service.setReverb(0.0);
-                service.setSpeed(1.0);
-              }),
-              _toneButton('Bass Push', service, () {
-                service.setEqualizerPreset('Bass Boost');
-                service.setReverb(0.08);
-              }),
-              _toneButton('Voice Lift', service, () {
-                service.setEqualizerPreset('Pop');
-                service.setSpeed(1.0);
-                service.setReverb(0.03);
-              }),
-              _toneButton('Airy', service, () {
-                service.setEqualizerPreset('Treble Boost');
-                service.setReverb(0.28);
-              }),
-              _toneButton('Club', service, () {
-                service.setEqualizerPreset('Electronic');
-                service.setReverb(0.18);
-                service.setSpeed(1.03);
-              }),
-              _toneButton('Warm', service, () {
-                service.setEqualizerPreset('Jazz');
-                service.setReverb(0.12);
-              }),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEqCard(
-    BuildContext context,
-    MusicService service,
-    List<int> freqs,
-    List<String> presets,
-    bool isDesktop,
-  ) {
-    return _sectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildSectionHeader('Equalizer'),
-              ),
-              TextButton.icon(
-                onPressed: service.resetEqualizer,
-                icon: const Icon(Icons.refresh_rounded,
-                    color: Colors.tealAccent, size: 18),
-                label: const Text('Reset EQ',
-                    style: TextStyle(color: Colors.tealAccent)),
-              ),
-              Switch(
-                value: service.isEqualizerEnabled,
-                onChanged: service.isEffectsEnabled
-                    ? service.setEqualizerEnabled
-                    : null,
-                activeColor: Colors.tealAccent,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: presets.map((preset) {
-              final isSelected = service.currentPreset == preset;
-              return ChoiceChip(
-                label: Text(preset),
-                selected: isSelected,
-                onSelected:
-                    service.isEffectsEnabled && service.isEqualizerEnabled
-                        ? (_) => service.setEqualizerPreset(preset)
-                        : null,
-                backgroundColor: Colors.white.withOpacity(0.05),
-                selectedColor: Colors.teal.withOpacity(0.24),
-                labelStyle: TextStyle(
-                    color: isSelected ? Colors.tealAccent : Colors.white70),
-                side: BorderSide(
-                    color: isSelected
-                        ? Colors.tealAccent.withOpacity(0.4)
-                        : Colors.white12),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 18),
-          if (isDesktop)
-            _buildDesktopEqBands(context, service, freqs)
-          else
-            _buildMobileEqBands(context, service, freqs),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDesktopEqBands(
-      BuildContext context, MusicService service, List<int> freqs) {
-    return Column(
-      children: List.generate(freqs.length, (index) {
-        final freq = freqs[index];
-        final value = service.currentEqBandValues[index];
-        final label = freq >= 1000 ? '${freq ~/ 1000} kHz' : '$freq Hz';
-        final enabled = service.isEffectsEnabled && service.isEqualizerEnabled;
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          Container(
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: theme.colorScheme.primaryContainer.withOpacity(0.72),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
             ),
-            child: Row(
+            child: Icon(
+              Icons.tune_rounded,
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 72,
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600),
+                Text(
+                  'Audio effects',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
                   ),
                 ),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 4,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 15),
-                      activeTrackColor: Colors.teal,
-                      inactiveTrackColor: Colors.grey[800],
-                      thumbColor: Colors.tealAccent,
-                      overlayColor: Colors.teal.withOpacity(0.2),
-                    ),
-                    child: Slider(
-                      value: value,
-                      min: -10,
-                      max: 10,
-                      divisions: 40,
-                      label: '${value.toStringAsFixed(1)} dB',
-                      onChanged: enabled
-                          ? (v) => service.setEqualizerBand(index, v)
-                          : null,
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 58,
-                  child: Text(
-                    '${value.toStringAsFixed(1)} dB',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      color: enabled ? Colors.tealAccent : Colors.white38,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                Text(
+                  service.isEffectsEnabled ? 'Processing enabled' : 'Bypassed',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildMobileEqBands(
-      BuildContext context, MusicService service, List<int> freqs) {
-    return SizedBox(
-      height: 220,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: freqs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final freq = freqs[index];
-          final value = service.currentEqBandValues[index];
-          final label = freq >= 1000 ? '${freq ~/ 1000}k' : '$freq';
-
-          return Column(
-            children: [
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: 3,
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 4,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 14),
-                      activeTrackColor: Colors.teal,
-                      inactiveTrackColor: Colors.grey[800],
-                      thumbColor: Colors.tealAccent,
-                      overlayColor: Colors.teal.withOpacity(0.2),
-                    ),
-                    child: Slider(
-                      value: value,
-                      min: -10,
-                      max: 10,
-                      onChanged: (service.isEffectsEnabled &&
-                              service.isEqualizerEnabled)
-                          ? (v) => service.setEqualizerBand(index, v)
-                          : null,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(label,
-                  style: const TextStyle(color: Colors.white54, fontSize: 10)),
-              Text('${value.toStringAsFixed(1)}dB',
-                  style: const TextStyle(color: Colors.teal, fontSize: 9)),
-            ],
-          );
-        },
+          TextButton.icon(
+            onPressed: service.resetAudioEffects,
+            icon: const Icon(Icons.restart_alt_rounded, size: 18),
+            label: const Text('Reset'),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: service.isEffectsEnabled,
+            onChanged: service.setEffectsEnabled,
+          ),
+          IconButton(
+            tooltip: 'Close',
+            icon: const Icon(Icons.close_rounded),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildSectionHeader(String title) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0),
-        ),
-      ],
+class _PlaybackCard extends StatelessWidget {
+  final MusicService service;
+
+  const _PlaybackCard({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    return _EffectCard(
+      title: 'Playback',
+      icon: Icons.speed_rounded,
+      child: Column(
+        children: [
+          _ReleaseSlider(
+            label: 'Speed',
+            value: service.speed,
+            min: 0.5,
+            max: 2.0,
+            divisions: 150,
+            enabled: service.isEffectsEnabled,
+            valueText: (value) => '${value.toStringAsFixed(2)}x',
+            onChangeEnd: service.setSpeed,
+          ),
+          const SizedBox(height: 12),
+          _ReleaseSlider(
+            label: 'Pitch',
+            value: service.pitch,
+            min: 0.5,
+            max: 2.0,
+            divisions: 150,
+            enabled: service.isEffectsEnabled && service.supportsPitchControl,
+            valueText: (value) => service.supportsPitchControl
+                ? '${value.toStringAsFixed(2)}x'
+                : 'Unavailable',
+            onChangeEnd: service.setPitch,
+          ),
+          const SizedBox(height: 12),
+          _ReleaseSlider(
+            label: 'Space',
+            value: service.reverb,
+            min: 0.0,
+            max: 1.0,
+            divisions: 100,
+            enabled: service.isEffectsEnabled,
+            valueText: (value) => value > 0.82
+                ? 'Large'
+                : value < 0.06
+                    ? 'Dry'
+                    : '${(value * 100).round()}%',
+            onChangeEnd: service.setReverb,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _QuickAction(
+                  label: 'Hi-Fi', onPressed: service.setHighFidelityPlayback),
+              _QuickAction(
+                  label: '0.9x', onPressed: () => service.setSpeed(0.9)),
+              _QuickAction(
+                  label: '1.0x', onPressed: () => service.setSpeed(1.0)),
+              _QuickAction(
+                  label: '1.1x', onPressed: () => service.setSpeed(1.1)),
+              _QuickAction(
+                  label: 'Dry', onPressed: () => service.setReverb(0.0)),
+              _QuickAction(
+                  label: 'Room', onPressed: () => service.setReverb(0.35)),
+              _QuickAction(
+                  label: 'Wide', onPressed: () => service.setReverb(0.7)),
+            ],
+          ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _sectionCard({required Widget child}) {
+class _ToneCard extends StatelessWidget {
+  final MusicService service;
+
+  const _ToneCard({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    final tones = <_TonePreset>[
+      _TonePreset('Hi-Fi', Icons.high_quality_rounded, () {
+        service.setHighFidelityPlayback();
+      }),
+      _TonePreset('Balanced', Icons.balance_rounded, () {
+        service.setEqualizerPreset('Normal');
+        service.setReverb(0.0);
+        service.setSpeed(1.0);
+      }),
+      _TonePreset('Bass', Icons.graphic_eq_rounded, () {
+        service.setEqualizerPreset('Bass Boost');
+        service.setReverb(0.08);
+      }),
+      _TonePreset('Voice', Icons.record_voice_over_rounded, () {
+        service.setEqualizerPreset('Pop');
+        service.setReverb(0.03);
+      }),
+      _TonePreset('Air', Icons.air_rounded, () {
+        service.setEqualizerPreset('Treble Boost');
+        service.setReverb(0.28);
+      }),
+      _TonePreset('Club', Icons.nightlife_rounded, () {
+        service.setEqualizerPreset('Electronic');
+        service.setReverb(0.18);
+        service.setSpeed(1.03);
+      }),
+      _TonePreset('Warm', Icons.wb_twilight_rounded, () {
+        service.setEqualizerPreset('Jazz');
+        service.setReverb(0.12);
+      }),
+      _TonePreset('Metal', Icons.bolt_rounded, () {
+        service.setEqualizerPreset('Metal');
+        service.setReverb(0.08);
+      }),
+      _TonePreset('Podcast', Icons.mic_rounded, () {
+        service.setEqualizerPreset('Podcast');
+        service.setReverb(0.0);
+        service.setSpeed(1.0);
+      }),
+      _TonePreset('Movie', Icons.movie_filter_rounded, () {
+        service.setEqualizerPreset('Movie');
+        service.setReverb(0.22);
+      }),
+      _TonePreset('Deep', Icons.south_rounded, () {
+        service.setEqualizerPreset('Deep');
+        service.setReverb(0.10);
+      }),
+      _TonePreset('Bright', Icons.wb_sunny_rounded, () {
+        service.setEqualizerPreset('Bright');
+        service.setReverb(0.06);
+      }),
+      _TonePreset('Soft', Icons.spa_rounded, () {
+        service.setEqualizerPreset('Soft');
+        service.setReverb(0.14);
+      }),
+    ];
+
+    return _EffectCard(
+      title: 'Tone profiles',
+      icon: Icons.auto_awesome_rounded,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: tones
+            .map(
+              (tone) => _ToneButton(
+                tone: tone,
+                enabled: service.isEffectsEnabled,
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _EqualizerCard extends StatelessWidget {
+  final MusicService service;
+  final List<int> freqs;
+  final List<String> presets;
+
+  const _EqualizerCard({
+    required this.service,
+    required this.freqs,
+    required this.presets,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final equalizerActive =
+        service.isEffectsEnabled && service.isEqualizerEnabled;
+
+    return _EffectCard(
+      title: 'Equalizer',
+      icon: Icons.equalizer_rounded,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton.icon(
+            onPressed: service.resetEqualizer,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Reset EQ'),
+          ),
+          Switch(
+            value: equalizerActive,
+            onChanged:
+                service.isEffectsEnabled ? service.setEqualizerEnabled : null,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: presets.map((preset) {
+              final selected =
+                  equalizerActive && service.currentPreset == preset;
+              return ChoiceChip(
+                label: Text(
+                  preset,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                selected: selected,
+                onSelected: equalizerActive
+                    ? (_) => service.setEqualizerPreset(preset)
+                    : null,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          _VerticalEqBands(service: service, freqs: freqs),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerticalEqBands extends StatelessWidget {
+  final MusicService service;
+  final List<int> freqs;
+
+  const _VerticalEqBands({required this.service, required this.freqs});
+
+  @override
+  Widget build(BuildContext context) {
+    final values = service.currentEqBandValues;
+    final enabled = service.isEffectsEnabled && service.isEqualizerEnabled;
+    final theme = Theme.of(context);
+    final size = MediaQuery.sizeOf(context);
+    final isDesktop = Responsive.isDesktop;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : size.width - 72;
+        final bandWidth =
+            (width / freqs.length).clamp(isDesktop ? 42.0 : 28.0, 58.0);
+        final sliderHeight = (size.height * (isDesktop ? 0.30 : 0.24))
+            .clamp(isDesktop ? 180.0 : 132.0, isDesktop ? 260.0 : 190.0)
+            .toDouble();
+
+        return SizedBox(
+          height: sliderHeight + 58,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: List.generate(freqs.length, (index) {
+              return Expanded(
+                child: Padding(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: bandWidth < 34 ? 1 : 3),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 20,
+                        child: Text(
+                          values[index].toStringAsFixed(0),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: enabled
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: _BareReleaseSlider(
+                            value: values[index],
+                            min: -10,
+                            max: 10,
+                            divisions: 40,
+                            enabled: enabled,
+                            onChanged: (value) =>
+                                service.previewEqualizerBand(index, value),
+                            onChangeEnd: (value) =>
+                                service.setEqualizerBand(index, value),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 28,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatFrequency(freqs[index]),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SongScopeTile extends StatelessWidget {
+  final MusicService service;
+
+  const _SongScopeTile({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _glassSurfaceColor(theme, _glassIntensity(context)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withOpacity(
+            0.18 + (_glassIntensity(context) * 0.08),
+          ),
+          width: 0.7,
+        ),
+      ),
+      child: CheckboxListTile(
+        value: service.useSongSpecificSettings,
+        onChanged: service.isEffectsEnabled
+            ? (value) => service.setUseSongSpecificSettings(value ?? false)
+            : null,
+        title: const Text('Save changes for this song only'),
+        subtitle: Text(
+          service.currentMusic?.title ?? 'Applies when a track is selected',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+    );
+  }
+}
+
+class _EffectCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final Widget? trailing;
+
+  const _EffectCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.035),
+        color: _glassSurfaceColor(theme, _glassIntensity(context)),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withOpacity(
+            0.18 + (_glassIntensity(context) * 0.08),
+          ),
+          width: 0.7,
+        ),
       ),
-      child: child,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildSlider(
-    BuildContext context, {
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required Function(double) onChanged,
-    required String displayValue,
-    bool enabledOverride = true,
-  }) {
-    final service = context.watch<MusicService>();
-    final enabled = service.isEffectsEnabled && enabledOverride;
+class _ReleaseSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final bool enabled;
+  final String Function(double value) valueText;
+  final ValueChanged<double> onChangeEnd;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  const _ReleaseSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.enabled,
+    required this.valueText,
+    required this.onChangeEnd,
+    this.divisions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return _ReleaseValueBuilder(
+      value: value,
+      min: min,
+      max: max,
+      builder: (context, preview, setPreview, clearPreview) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
-            Text(
-              displayValue,
-              style: TextStyle(
-                color: enabled ? Colors.tealAccent : Colors.white38,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  valueText(preview),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: enabled
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            _BareSlider(
+              value: preview,
+              min: min,
+              max: max,
+              divisions: divisions,
+              enabled: enabled,
+              onChanged: setPreview,
+              onChangeEnd: (next) {
+                onChangeEnd(next);
+                clearPreview();
+              },
             ),
           ],
-        ),
-        SliderTheme(
-          data: SliderThemeData(
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 15),
-            activeTrackColor: Colors.teal,
-            inactiveTrackColor: Colors.grey[800],
-            thumbColor: Colors.tealAccent,
-            overlayColor: Colors.teal.withOpacity(0.2),
-          ),
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: 100,
-            onChanged: enabled ? onChanged : null,
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
+}
 
-  Widget _quickButton(String label, VoidCallback onPressed) {
+class _BareReleaseSlider extends StatelessWidget {
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final bool enabled;
+  final ValueChanged<double>? onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  const _BareReleaseSlider({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.enabled,
+    required this.onChangeEnd,
+    this.onChanged,
+    this.divisions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _ReleaseValueBuilder(
+      value: value,
+      min: min,
+      max: max,
+      builder: (context, preview, setPreview, clearPreview) {
+        return _BareSlider(
+          value: preview,
+          min: min,
+          max: max,
+          divisions: divisions,
+          enabled: enabled,
+          onChanged: (next) {
+            setPreview(next);
+            onChanged?.call(next);
+          },
+          onChangeEnd: (next) {
+            onChangeEnd(next);
+            clearPreview();
+          },
+        );
+      },
+    );
+  }
+}
+
+class _BareSlider extends StatelessWidget {
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final bool enabled;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  const _BareSlider({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.enabled,
+    required this.onChanged,
+    required this.onChangeEnd,
+    this.divisions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Slider(
+      value: value.clamp(min, max).toDouble(),
+      min: min,
+      max: max,
+      divisions: divisions,
+      onChanged: enabled ? onChanged : null,
+      onChangeEnd: enabled ? onChangeEnd : null,
+    );
+  }
+}
+
+class _ReleaseValueBuilder extends StatefulWidget {
+  final double value;
+  final double min;
+  final double max;
+  final Widget Function(
+    BuildContext context,
+    double preview,
+    ValueChanged<double> setPreview,
+    VoidCallback clearPreview,
+  ) builder;
+
+  const _ReleaseValueBuilder({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.builder,
+  });
+
+  @override
+  State<_ReleaseValueBuilder> createState() => _ReleaseValueBuilderState();
+}
+
+class _ReleaseValueBuilderState extends State<_ReleaseValueBuilder> {
+  double? _preview;
+
+  @override
+  void didUpdateWidget(covariant _ReleaseValueBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _preview = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value =
+        (_preview ?? widget.value).clamp(widget.min, widget.max).toDouble();
+    return widget.builder(
+      context,
+      value,
+      (next) => setState(() => _preview = next),
+      () => setState(() => _preview = null),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const _QuickAction({required this.label, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
     return OutlinedButton(
       onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.teal.withOpacity(0.35)),
-        foregroundColor: Colors.white,
-        backgroundColor: Colors.white.withOpacity(0.03),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      child: Text(label),
-    );
-  }
-
-  Widget _toneButton(
-      String label, MusicService service, VoidCallback onPressed) {
-    return ElevatedButton(
-      onPressed: service.isEffectsEnabled ? onPressed : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.teal.withOpacity(0.16),
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: Colors.white10,
-        disabledForegroundColor: Colors.white38,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
       child: Text(label),
     );
   }
 }
 
+class _TonePreset {
+  final String label;
+  final IconData icon;
+  final VoidCallback apply;
+
+  const _TonePreset(this.label, this.icon, this.apply);
+}
+
+class _ToneButton extends StatelessWidget {
+  final _TonePreset tone;
+  final bool enabled;
+
+  const _ToneButton({required this.tone, required this.enabled});
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      onPressed: enabled ? tone.apply : null,
+      icon: Icon(tone.icon, size: 18),
+      label: Text(tone.label),
+    );
+  }
+}
+
+String _formatFrequency(int freq, {bool spaced = false}) {
+  if (freq >= 1000) {
+    return spaced ? '${freq ~/ 1000} kHz' : '${freq ~/ 1000}k';
+  }
+  return '$freq Hz';
+}
+
+double _glassIntensity(BuildContext context) {
+  return context.select<SettingsModel, double>(
+    (settings) => settings.glassEffect.clamp(0.0, 1.0),
+  );
+}
+
+Color _glassSurfaceColor(ThemeData theme, double intensity) {
+  final base = theme.brightness == Brightness.dark
+      ? theme.colorScheme.surfaceContainerHighest
+      : theme.colorScheme.surfaceContainerLow;
+  final opacity = theme.brightness == Brightness.dark
+      ? 0.94 - (0.14 * intensity)
+      : 0.98 - (0.10 * intensity);
+  return base.withOpacity(opacity.clamp(0.80, 0.98));
+}
+
 void showAudioEffectsMenu(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => const Center(
-      child: Material(
-        color: Colors.transparent,
-        child: AudioEffectsMenu(),
-      ),
+    builder: (context) => const Material(
+      color: Colors.transparent,
+      child: AudioEffectsMenu(),
     ),
   );
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -57,21 +58,78 @@ class YoutubeMusicResult {
 
 class YoutubeMusicDownload {
   final List<String> files;
+  final List<String> libraryFiles;
   final String downloadDir;
   final String message;
 
   const YoutubeMusicDownload({
     required this.files,
+    this.libraryFiles = const [],
     required this.downloadDir,
     required this.message,
   });
 
   factory YoutubeMusicDownload.fromMap(Map<String, dynamic> map) {
     final rawFiles = map['files'] as List? ?? const [];
+    final rawLibraryFiles = map['libraryFiles'] as List? ?? const [];
     return YoutubeMusicDownload(
       files: rawFiles.map((item) => item.toString()).toList(),
+      libraryFiles: rawLibraryFiles.map((item) => item.toString()).toList(),
       downloadDir: map['downloadDir']?.toString() ?? '',
       message: map['message']?.toString() ?? '',
+    );
+  }
+}
+
+class YoutubeVideoQuality {
+  final String label;
+  final int height;
+  final String url;
+  final String formatId;
+  final String ext;
+  final bool hasAudio;
+
+  const YoutubeVideoQuality({
+    required this.label,
+    required this.height,
+    required this.url,
+    required this.formatId,
+    required this.ext,
+    this.hasAudio = true,
+  });
+
+  factory YoutubeVideoQuality.fromMap(Map<String, dynamic> map) {
+    final height = (map['height'] as num?)?.toInt() ?? 0;
+    return YoutubeVideoQuality(
+      label: map['label']?.toString() ?? (height > 0 ? '${height}p' : 'Auto'),
+      height: height,
+      url: map['url']?.toString() ?? '',
+      formatId: map['formatId']?.toString() ?? '',
+      ext: map['ext']?.toString() ?? '',
+      hasAudio: map['hasAudio'] != false,
+    );
+  }
+}
+
+class YoutubeSubtitleOption {
+  final String language;
+  final String label;
+  final String url;
+  final bool automatic;
+
+  const YoutubeSubtitleOption({
+    required this.language,
+    required this.label,
+    required this.url,
+    required this.automatic,
+  });
+
+  factory YoutubeSubtitleOption.fromMap(Map<String, dynamic> map) {
+    return YoutubeSubtitleOption(
+      language: map['language']?.toString() ?? '',
+      label: map['label']?.toString() ?? 'Subtitles',
+      url: map['url']?.toString() ?? '',
+      automatic: map['automatic'] == true,
     );
   }
 }
@@ -85,6 +143,9 @@ class YoutubeMusicStream {
   final int durationSeconds;
   final String videoId;
   final bool isVideo;
+  final String qualityLabel;
+  final List<YoutubeVideoQuality> qualities;
+  final List<YoutubeSubtitleOption> subtitles;
 
   const YoutubeMusicStream({
     required this.url,
@@ -95,32 +156,55 @@ class YoutubeMusicStream {
     required this.durationSeconds,
     required this.videoId,
     required this.isVideo,
+    this.qualityLabel = 'Auto',
+    this.qualities = const [],
+    this.subtitles = const [],
   });
 
   factory YoutubeMusicStream.fromMap(Map<String, dynamic> map) {
+    final rawQualities = map['qualities'] as List? ?? const [];
+    final rawSubtitles = map['subtitles'] as List? ?? const [];
     return YoutubeMusicStream(
       url: map['url']?.toString() ?? '',
       title: map['title']?.toString() ?? 'YouTube Music',
       artist: map['artist']?.toString() ?? 'YouTube Music',
       album: map['album']?.toString() ?? '',
       thumbnailUrl: map['thumbnailUrl']?.toString() ?? '',
-      durationSeconds: (map['durationSeconds'] as num?)?.toInt() ?? 0,
+      durationSeconds: _secondsFromDynamic(map['durationSeconds']),
       videoId: map['videoId']?.toString() ?? '',
       isVideo: map['isVideo'] == true,
+      qualityLabel: map['qualityLabel']?.toString() ?? 'Auto',
+      qualities: rawQualities
+          .whereType<Map>()
+          .map((item) =>
+              YoutubeVideoQuality.fromMap(Map<String, dynamic>.from(item)))
+          .where((item) => item.url.isNotEmpty)
+          .toList(),
+      subtitles: rawSubtitles
+          .whereType<Map>()
+          .map((item) =>
+              YoutubeSubtitleOption.fromMap(Map<String, dynamic>.from(item)))
+          .where((item) => item.url.isNotEmpty)
+          .toList(),
     );
   }
 }
 
 class YoutubeMusicService {
   static const MethodChannel platform = MethodChannel('python_channel');
+  static const int _maxStreamCacheEntries = 12;
+
+  final Map<String, Future<YoutubeMusicStream>> _streamFutures = {};
+  final Map<String, YoutubeMusicStream> _streamCache = {};
 
   static bool get isSupported =>
-      Platform.isAndroid ||
-      Platform.isWindows ||
-      Platform.isLinux ||
-      Platform.isMacOS;
+      !kIsWeb &&
+      (Platform.isAndroid ||
+          Platform.isWindows ||
+          Platform.isLinux ||
+          Platform.isMacOS);
 
-  static bool get usesNativeChannel => Platform.isAndroid;
+  static bool get usesNativeChannel => !kIsWeb && Platform.isAndroid;
 
   Future<int> add(int a, int b) async {
     if (!usesNativeChannel) {
@@ -175,6 +259,14 @@ class YoutubeMusicService {
 
   Future<YoutubeMusicDownload> download(
     YoutubeMusicResult result, {
+    bool video = false,
+    int? qualityHeight,
+    List<int> qualityHeights = const [],
+    bool subtitlesOnly = false,
+    bool includeSubtitles = false,
+    String? subtitleLanguage,
+    List<String> subtitleLanguages = const [],
+    bool automaticSubtitles = false,
     void Function(double? progress, String message)? onProgress,
   }) async {
     if (!isSupported) {
@@ -184,9 +276,18 @@ class YoutubeMusicService {
 
     try {
       final Map<dynamic, dynamic> response;
+      final outputDir = await _resolveDownloadDirectory();
       if (usesNativeChannel) {
-        final outputDir = await _desktopDownloadDirectory();
-        final channelMap = result.toChannelMap()..['outputDir'] = outputDir;
+        final channelMap = result.toChannelMap()
+          ..['outputDir'] = outputDir
+          ..['video'] = video
+          ..['qualityHeight'] = qualityHeight
+          ..['qualityHeights'] = qualityHeights
+          ..['subtitlesOnly'] = subtitlesOnly
+          ..['includeSubtitles'] = includeSubtitles
+          ..['subtitleLanguage'] = subtitleLanguage
+          ..['subtitleLanguages'] = subtitleLanguages
+          ..['automaticSubtitles'] = automaticSubtitles;
         onProgress?.call(null, 'Starting download...');
         response = await platform.invokeMethod<Map<dynamic, dynamic>>(
               'downloadYoutubeMusic',
@@ -195,14 +296,46 @@ class YoutubeMusicService {
             const {};
         onProgress?.call(1, 'Download finished.');
       } else {
-        final outputDir = await _desktopDownloadDirectory();
-        final output = await _runPython([
+        final args = [
           'download',
           '--item-json',
           jsonEncode(result.toChannelMap()),
           '--output-dir',
           outputDir,
-        ], onProgress: onProgress);
+        ];
+        if (video) {
+          args.add('--video');
+        }
+        if (qualityHeight != null && qualityHeight > 0) {
+          args.addAll(['--quality-height', '$qualityHeight']);
+        }
+        if (qualityHeights.isNotEmpty) {
+          args.addAll([
+            '--quality-heights',
+            qualityHeights.where((height) => height > 0).join(',')
+          ]);
+        }
+        if (subtitlesOnly) {
+          args.add('--subtitles-only');
+        }
+        if (includeSubtitles) {
+          args.add('--write-subtitles');
+          if ((subtitleLanguage ?? '').trim().isNotEmpty) {
+            args.addAll(['--subtitle-lang', subtitleLanguage!.trim()]);
+          }
+          final languages = subtitleLanguages
+              .map((language) => language.trim())
+              .where((language) => language.isNotEmpty)
+              .toSet()
+              .join(',');
+          if (languages.isNotEmpty) {
+            args.addAll(['--subtitle-langs', languages]);
+          }
+          if (automaticSubtitles) {
+            args.add('--auto-subtitles');
+          }
+        }
+        final output = await _runPython(args, onProgress: onProgress);
         response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
       }
 
@@ -212,7 +345,79 @@ class YoutubeMusicService {
     }
   }
 
+  Future<String> resolvedDownloadDirectory() => _resolveDownloadDirectory();
+
   Future<YoutubeMusicStream> stream(YoutubeMusicResult result) async {
+    final key = _cacheKey(result);
+    final cached = _streamCache[key];
+    if (cached != null) {
+      return cached;
+    }
+
+    final pending = _streamFutures[key];
+    if (pending != null) {
+      return pending;
+    }
+
+    final future = _resolveStream(result);
+    _streamFutures[key] = future;
+    try {
+      final stream = await future;
+      _streamCache[key] = stream;
+      _trimStreamCache();
+      return stream;
+    } finally {
+      _streamFutures.remove(key);
+    }
+  }
+
+  Future<YoutubeMusicStream> streamVideoId(
+    String videoId, {
+    int? maxHeight,
+  }) async {
+    final normalized = videoId.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError('videoId is empty');
+    }
+
+    final result = YoutubeMusicResult(
+      resultType: 'video',
+      title: 'YouTube Video',
+      artist: 'YouTube',
+      duration: '',
+      videoId: normalized,
+      browseId: '',
+      thumbnailUrl: '',
+      raw: {'videoId': normalized},
+    );
+    return _resolveStream(result, maxHeight: maxHeight);
+  }
+
+  void warmStreams(Iterable<YoutubeMusicResult> results, {int limit = 3}) {
+    if (!isSupported) return;
+
+    for (final result in results.take(limit)) {
+      final key = _cacheKey(result);
+      if (_streamCache.containsKey(key) || _streamFutures.containsKey(key)) {
+        continue;
+      }
+      final future = _resolveStream(result);
+      _streamFutures[key] = future;
+      future.then((stream) {
+        _streamCache[key] = stream;
+        _trimStreamCache();
+      }).catchError((Object _) {
+        // Warm-up failures are intentionally quiet; tapping still reports them.
+      }).whenComplete(() {
+        _streamFutures.remove(key);
+      });
+    }
+  }
+
+  Future<YoutubeMusicStream> _resolveStream(
+    YoutubeMusicResult result, {
+    int? maxHeight,
+  }) async {
     if (!isSupported) {
       throw UnsupportedError(
           'YouTube Music is not available on this platform yet.');
@@ -227,11 +432,15 @@ class YoutubeMusicService {
             ) ??
             const {};
       } else {
-        final output = await _runPython([
+        final args = [
           'stream',
           '--item-json',
           jsonEncode(result.toChannelMap()),
-        ]);
+        ];
+        if (maxHeight != null && maxHeight > 0) {
+          args.addAll(['--quality-height', '$maxHeight']);
+        }
+        final output = await _runPython(args);
         response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
       }
 
@@ -241,20 +450,32 @@ class YoutubeMusicService {
     }
   }
 
-  Future<String> _desktopDownloadDirectory() async {
+  Future<String> _resolveDownloadDirectory() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(SettingsModel.youtubeMusicDownloadPathKey);
     if (saved != null && saved.trim().isNotEmpty) {
-      return saved;
+      return _ensureWritableDirectory(saved.trim());
     }
 
     final defaultDir = await defaultYoutubeMusicDownloadDirectory();
+    final resolvedDefault = await _ensureWritableDirectory(defaultDir);
     await prefs.setString(
-        SettingsModel.youtubeMusicDownloadPathKey, defaultDir);
-    return defaultDir;
+        SettingsModel.youtubeMusicDownloadPathKey, resolvedDefault);
+    return resolvedDefault;
+  }
+
+  Future<String> _ensureWritableDirectory(String path) async {
+    if (kIsWeb) return path;
+    final directory = Directory(path);
+    await directory.create(recursive: true);
+    return directory.path;
   }
 
   static Future<String> defaultYoutubeMusicDownloadDirectory() async {
+    if (kIsWeb) {
+      return 'PlayerVf YouTube Music';
+    }
+
     if (Platform.isAndroid) {
       return p.join('/storage', 'emulated', '0', 'Music');
     }
@@ -275,10 +496,29 @@ class YoutubeMusicService {
     return p.join(musicDir.path, 'PlayerVf', 'YouTube Music');
   }
 
+  String _cacheKey(YoutubeMusicResult result) {
+    if (result.videoId.isNotEmpty) return result.videoId;
+    if (result.browseId.isNotEmpty) {
+      return '${result.resultType}:${result.browseId}';
+    }
+    return '${result.resultType}:${result.title}:${result.artist}';
+  }
+
+  void _trimStreamCache() {
+    while (_streamCache.length > _maxStreamCacheEntries) {
+      _streamCache.remove(_streamCache.keys.first);
+    }
+  }
+
   Future<String> _runPython(
     List<String> args, {
     void Function(double? progress, String message)? onProgress,
   }) async {
+    if (kIsWeb) {
+      throw UnsupportedError(
+          'YouTube Music downloads and streaming are not available on web.');
+    }
+
     final script = await _pythonScriptPath();
     final executable = await _desktopPythonExecutable(script, args);
     final Process process;
@@ -451,4 +691,26 @@ class YoutubeMusicService {
     }
     return output;
   }
+}
+
+int _secondsFromDynamic(dynamic value) {
+  if (value == null) return 0;
+  if (value is num) return value.toInt();
+
+  final text = value.toString().trim();
+  if (text.isEmpty) return 0;
+  final numeric = int.tryParse(text);
+  if (numeric != null) {
+    return numeric > 10000 ? numeric ~/ 1000 : numeric;
+  }
+
+  final parts = text.split(':');
+  if (parts.length < 2 || parts.length > 3) return 0;
+  var total = 0;
+  for (final part in parts) {
+    final parsed = int.tryParse(part);
+    if (parsed == null) return 0;
+    total = (total * 60) + parsed;
+  }
+  return total;
 }

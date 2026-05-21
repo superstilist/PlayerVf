@@ -45,7 +45,7 @@ def unique_path(path: Path) -> Path:
 
 
 def unique_media_stem(stem: Path) -> Path:
-    suffixes = (".mp3", ".m4a", ".webm", ".opus", ".ogg", ".aac")
+    suffixes = (".mp3", ".m4a", ".webm", ".opus", ".ogg", ".aac", ".mp4", ".mkv", ".mov", ".m4v")
     temp_suffixes = tuple(f".temp{suffix}" for suffix in suffixes) + (".part",)
 
     def is_free(candidate: Path) -> bool:
@@ -189,6 +189,55 @@ def format_track_no(index: int, total: int) -> str:
     return str(index).zfill(max(2, len(str(total))))
 
 
+def duration_seconds_from_value(value: Any) -> Optional[int]:
+    """Normalize common YTMusic/yt-dlp duration values to whole seconds."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        seconds = int(value)
+        return seconds if seconds > 0 else None
+
+    text = str(value).strip()
+    if not text or text.lower() == "none":
+        return None
+    if text.isdigit():
+        number = int(text)
+        return number // 1000 if number > 10000 else number
+    if ":" in text:
+        parts = text.split(":")
+        if 2 <= len(parts) <= 3 and all(part.strip().isdigit() for part in parts):
+            total = 0
+            for part in parts:
+                total = (total * 60) + int(part.strip())
+            return total if total > 0 else None
+    return None
+
+
+def extract_duration_seconds(*entities: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Find the best duration value in YTMusic or yt-dlp metadata dictionaries."""
+    keys = (
+        "duration",
+        "durationSeconds",
+        "lengthSeconds",
+        "approxDurationMs",
+        "duration_ms",
+    )
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        for key in keys:
+            seconds = duration_seconds_from_value(entity.get(key))
+            if seconds:
+                return seconds
+        video_details = entity.get("videoDetails")
+        if isinstance(video_details, dict):
+            for key in keys:
+                seconds = duration_seconds_from_value(video_details.get(key))
+                if seconds:
+                    return seconds
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
@@ -295,7 +344,9 @@ class MediaDownloader:
                     result_type=result_type,
                     title=r.get("title", ""),
                     artist=artist,
-                    duration=r.get("duration", ""),
+            duration=r.get("duration", "") or (
+                str(extract_duration_seconds(r) or "") if extract_duration_seconds(r) else ""
+            ),
                     video_id=r.get("videoId", ""),
                     browse_id=r.get("browseId", ""),
                     thumbnails=r.get("thumbnails"),
@@ -463,7 +514,7 @@ class MediaDownloader:
             comment: str = "",
     ) -> None:
         """Write ID3v2.3 tags (and optional cover art) to an MP3 file."""
-        from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TIT2, TPE1, TDRC, TRCK
+        from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TIT2, TPE1, TDRC, TLEN, TRCK
         from mutagen.mp3 import MP3
 
         audio = MP3(str(mp3_path), ID3=ID3)
@@ -471,7 +522,7 @@ class MediaDownloader:
             audio.add_tags()
         tags = audio.tags
 
-        for frame in ("TIT2", "TPE1", "TALB", "TDRC", "TCON", "TRCK", "COMM", "APIC"):
+        for frame in ("TIT2", "TPE1", "TALB", "TDRC", "TCON", "TRCK", "TLEN", "COMM", "APIC"):
             try:
                 tags.delall(frame)
             except Exception:
@@ -488,6 +539,9 @@ class MediaDownloader:
         if track_no is not None:
             track_str = f"{track_no}/{total_tracks}" if total_tracks is not None else str(track_no)
             tags.add(TRCK(encoding=3, text=track_str))
+        audio_duration = getattr(audio.info, "length", 0) or 0
+        if audio_duration > 0:
+            tags.add(TLEN(encoding=3, text=str(int(audio_duration * 1000))))
         if comment:
             tags.add(COMM(encoding=3, lang="eng", desc="Comment", text=comment))
         if cover_path and cover_path.exists():
@@ -658,6 +712,20 @@ class MediaDownloader:
                         temp_cover.unlink(missing_ok=True)
                     except Exception:
                         pass
+        duration_seconds = extract_duration_seconds(track, info if isinstance(info, dict) else None)
+        self.save_json(
+            {
+                "title": title,
+                "artist": artist,
+                "album": album,
+                "date": date,
+                "durationSeconds": duration_seconds or 0,
+                "videoId": video_id,
+                "file": str(mp3_path),
+                "downloadedAt": datetime.now().isoformat(timespec="seconds"),
+            },
+            f"{artist} - {title}",
+        )
         return mp3_path
 
     # ------------------------------------------------------------------
@@ -902,7 +970,9 @@ def _search_item_to_dict(item: SearchItem) -> Dict[str, Any]:
         "resultType": item.result_type,
         "title": item.title,
         "artist": item.artist,
-        "duration": item.duration,
+        "duration": item.duration or (
+            str(extract_duration_seconds(item.raw or {}) or "") if extract_duration_seconds(item.raw or {}) else ""
+        ),
         "videoId": item.video_id,
         "browseId": item.browse_id,
         "thumbnailUrl": item.thumbnail_url or "",
@@ -920,7 +990,11 @@ def _search_item_from_dict(data: Dict[str, Any]) -> SearchItem:
         result_type=result_type,
         title=str(data.get("title") or raw.get("title") or "Unknown title"),
         artist=str(data.get("artist") or _artist_text(raw)),
-        duration=str(data.get("duration") or raw.get("duration") or ""),
+        duration=str(
+            data.get("duration")
+            or raw.get("duration")
+            or (extract_duration_seconds(raw) or "")
+        ),
         video_id=video_id,
         browse_id=str(data.get("browseId") or data.get("browse_id") or raw.get("browseId") or ""),
         thumbnails=raw.get("thumbnails") if isinstance(raw.get("thumbnails"), list) else None,
@@ -941,7 +1015,437 @@ def search_youtube_music(query: str, filter_name: str = "songs", limit: int = 20
     return json.dumps([_search_item_to_dict(item) for item in items], ensure_ascii=True)
 
 
-def download_youtube_music(item_json: Any, output_dir: Optional[str] = None) -> str:
+def _download_youtube_video_file(
+    item: SearchItem,
+    download_dir: Path,
+    quality_height: Optional[int] = None,
+    quality_heights: Optional[List[int]] = None,
+    write_subtitles: bool = False,
+    subtitle_lang: Optional[str] = None,
+    subtitle_langs: Optional[List[str]] = None,
+    auto_subtitles: bool = False,
+) -> List[Path]:
+    video_id = item.video_id or item.raw.get("videoId")
+    if not video_id:
+        raise ValueError("This video result cannot be downloaded because it has no videoId.")
+
+    import yt_dlp
+
+    download_dir.mkdir(parents=True, exist_ok=True)
+    stem = download_dir / safe_filename(f"{item.artist} - {item.title}" if item.artist else item.title)
+    heights = [int(h) for h in (quality_heights or []) if int(h or 0) > 0]
+    if not heights and quality_height:
+        heights = [int(quality_height)]
+    if not heights:
+        heights = [0]
+    heights = sorted(set(heights), reverse=True)
+
+    subtitle_languages = [
+        str(lang).strip()
+        for lang in (subtitle_langs or ([] if not subtitle_lang else [subtitle_lang]))
+        if str(lang).strip()
+    ]
+    if not subtitle_languages:
+        subtitle_languages = ["en", "cs", "sk"]
+
+    def _hook(status: Dict[str, Any]) -> None:
+        total = status.get("total_bytes") or status.get("total_bytes_estimate") or 0
+        downloaded = status.get("downloaded_bytes") or 0
+        percent = float(downloaded) / float(total) if total else None
+        _emit_progress({
+            "event": "download",
+            "status": status.get("status", ""),
+            "percent": percent,
+            "downloadedBytes": downloaded,
+            "totalBytes": total,
+            "filename": status.get("filename", ""),
+        })
+
+    for candidate in stem.parent.glob(stem.name + ".*"):
+        if candidate.suffix.lower() in (".part", ".ytdl", ".tmp"):
+            try:
+                candidate.unlink()
+            except Exception:
+                pass
+
+    all_files: List[Path] = []
+    manifest_qualities: List[Dict[str, Any]] = []
+    manifest_subtitles: Dict[str, Dict[str, Any]] = {}
+    subtitle_failures: List[str] = []
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    manifest_path = stem.with_suffix(".playervf.json")
+    existing_manifest = _read_youtube_video_manifest(manifest_path)
+    if not existing_manifest:
+        existing_path = _find_youtube_video_manifest(download_dir, str(video_id))
+        if existing_path:
+            manifest_path = existing_path
+            stem = existing_path.with_suffix("")
+            existing_manifest = _read_youtube_video_manifest(existing_path)
+    manifest_qualities = list(existing_manifest.get("qualities") or [])
+    manifest_subtitles = _subtitle_manifest_map(existing_manifest.get("subtitles") or [])
+    subtitle_failures = list(existing_manifest.get("subtitleFailures") or [])
+
+    for cap in heights:
+        label = _video_quality_label(cap)
+        existing_quality = _find_manifest_quality(manifest_qualities, cap)
+        if existing_quality is not None:
+            existing_path = Path(str(existing_quality.get("path") or ""))
+            if existing_path.exists():
+                _emit_progress({
+                    "event": "download",
+                    "status": "skipped",
+                    "percent": 1,
+                    "filename": f"{label} already saved",
+                })
+                all_files.append(existing_path)
+                continue
+
+        quality_stem = unique_media_stem(download_dir / safe_filename(
+            f"{item.artist} - {item.title}.{label}" if item.artist else f"{item.title}.{label}"
+        ))
+        outtmpl = str(quality_stem) + ".%(ext)s"
+        format_selector = _video_download_format_selector(cap)
+        for old_file in quality_stem.parent.glob(quality_stem.name + ".*"):
+            if old_file.suffix.lower() in {".part", ".ytdl", ".tmp"}:
+                try:
+                    old_file.unlink()
+                except Exception:
+                    pass
+
+        ydl_opts: Dict[str, Any] = {
+            "format": format_selector,
+            "format_sort": ["res", "fps", "br"],
+            "outtmpl": outtmpl,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "merge_output_format": "mp4",
+            "writethumbnail": False,
+            "ignoreerrors": True,
+            "overwrites": False,
+            "continuedl": True,
+            "progress_hooks": [_hook],
+        }
+
+        _emit_progress({
+            "event": "download",
+            "status": "starting",
+            "percent": None,
+            "filename": f"{label} video",
+        })
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+        except Exception as error:
+            message = str(error)
+            raise RuntimeError(f"Video quality {label} download failed: {message}") from error
+
+        media_suffixes = {".mp4", ".mkv", ".webm", ".mov", ".m4v"}
+        candidates = sorted(
+            [path for path in quality_stem.parent.glob(quality_stem.name + ".*") if path.exists()],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        media_files = [path for path in candidates if path.suffix.lower() in media_suffixes]
+        if not media_files:
+            raise FileNotFoundError(f"Video file was not created for video_id={video_id}")
+        media_path = media_files[0]
+        all_files.append(media_path)
+        manifest_qualities = [
+            quality for quality in manifest_qualities if int(quality.get("height") or -1) != cap
+        ]
+        manifest_qualities.append({
+            "label": label,
+            "height": cap,
+            "path": str(media_path),
+            "ext": media_path.suffix.lstrip("."),
+            "formatSelector": format_selector,
+        })
+
+    if write_subtitles:
+        subtitle_files, subtitle_failures = _download_video_subtitle_sidecars(
+            video_url=url,
+            stem=stem,
+            languages=subtitle_languages,
+            automatic=auto_subtitles,
+        )
+        for subtitle_path in subtitle_files:
+            key = subtitle_path.name
+            manifest_subtitles[key] = {
+                "label": subtitle_path.stem,
+                "language": _subtitle_language_from_filename(subtitle_path.name),
+                "path": str(subtitle_path),
+                "automatic": auto_subtitles,
+            }
+            all_files.append(subtitle_path)
+
+    manifest = {
+        "type": "playervf.youtubeVideoSet",
+        "version": 1,
+        "videoId": video_id,
+        "title": item.title,
+        "artist": item.artist,
+        "qualities": manifest_qualities,
+        "subtitles": list(manifest_subtitles.values()),
+        "subtitleFailures": subtitle_failures,
+        "createdAt": datetime.now().isoformat(timespec="seconds"),
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+    all_files.append(manifest_path)
+    return all_files
+
+
+def _download_youtube_video_subtitles_only(
+    item: SearchItem,
+    download_dir: Path,
+    subtitle_lang: Optional[str] = None,
+    subtitle_langs: Optional[List[str]] = None,
+    auto_subtitles: bool = False,
+) -> List[Path]:
+    video_id = item.video_id or item.raw.get("videoId")
+    if not video_id:
+        raise ValueError("This video result cannot download subtitles because it has no videoId.")
+
+    download_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = _find_youtube_video_manifest(download_dir, str(video_id))
+    if manifest_path is None:
+        stem = download_dir / safe_filename(f"{item.artist} - {item.title}" if item.artist else item.title)
+        manifest_path = stem.with_suffix(".playervf.json")
+        manifest = {}
+    else:
+        stem = manifest_path.with_suffix("")
+        manifest = _read_youtube_video_manifest(manifest_path)
+
+    subtitle_languages = [
+        str(lang).strip()
+        for lang in (subtitle_langs or ([] if not subtitle_lang else [subtitle_lang]))
+        if str(lang).strip()
+    ]
+    if not subtitle_languages:
+        subtitle_languages = ["en", "cs", "sk"]
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    subtitle_files, subtitle_failures = _download_video_subtitle_sidecars(
+        video_url=url,
+        stem=stem,
+        languages=subtitle_languages,
+        automatic=auto_subtitles,
+    )
+
+    subtitles = _subtitle_manifest_map(manifest.get("subtitles") or [])
+    for subtitle_path in subtitle_files:
+        language = _subtitle_language_from_filename(subtitle_path.name)
+        key = f"{language}:{auto_subtitles}"
+        subtitles[key] = {
+            "label": subtitle_path.stem,
+            "language": language,
+            "path": str(subtitle_path),
+            "automatic": auto_subtitles,
+        }
+
+    merged_manifest = {
+        "type": "playervf.youtubeVideoSet",
+        "version": 1,
+        "videoId": video_id,
+        "title": item.title,
+        "artist": item.artist,
+        "qualities": list(manifest.get("qualities") or []),
+        "subtitles": list(subtitles.values()),
+        "subtitleFailures": list(manifest.get("subtitleFailures") or []) + subtitle_failures,
+        "createdAt": manifest.get("createdAt") or datetime.now().isoformat(timespec="seconds"),
+        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+    }
+    manifest_path.write_text(json.dumps(merged_manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+    return subtitle_files + [manifest_path]
+
+
+def _read_youtube_video_manifest(path: Path) -> Dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("type") == "playervf.youtubeVideoSet":
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _find_youtube_video_manifest(download_dir: Path, video_id: str) -> Optional[Path]:
+    if not video_id:
+        return None
+    try:
+        candidates = sorted(
+            download_dir.rglob("*.playervf.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except Exception:
+        return None
+    for candidate in candidates:
+        data = _read_youtube_video_manifest(candidate)
+        if str(data.get("videoId") or "") == str(video_id):
+            return candidate
+    return None
+
+
+def _subtitle_manifest_map(items: Any) -> Dict[str, Dict[str, Any]]:
+    result: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(items, list):
+        return result
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        language = str(item.get("language") or "")
+        automatic = bool(item.get("automatic"))
+        path = str(item.get("path") or item.get("url") or "")
+        key = f"{language}:{automatic}" if language else path
+        if key:
+            result[key] = dict(item)
+    return result
+
+
+def _find_manifest_quality(qualities: List[Dict[str, Any]], height: int) -> Optional[Dict[str, Any]]:
+    for quality in qualities:
+        if not isinstance(quality, dict):
+            continue
+        try:
+            if int(quality.get("height") or -1) == int(height):
+                return quality
+        except Exception:
+            continue
+    return None
+
+
+def _video_download_format_selector(max_height: int) -> str:
+    if max_height > 0:
+        return "/".join([
+            f"bv*[height={max_height}][ext=mp4]+ba[ext=m4a]",
+            f"bv*[height={max_height}]+ba",
+            f"bestvideo[height={max_height}]+bestaudio",
+            f"best[height={max_height}][vcodec!=none][acodec!=none]",
+            f"bv*[height<={max_height}][ext=mp4]+ba[ext=m4a]",
+            f"bv*[height<={max_height}]+ba",
+            f"bestvideo[height<={max_height}]+bestaudio",
+            f"best[height<={max_height}][vcodec!=none][acodec!=none]",
+            "bv*[ext=mp4]+ba[ext=m4a]",
+            "bv*+ba",
+            "best[vcodec!=none][acodec!=none]",
+            "best",
+        ])
+    return "/".join([
+        "bv*[ext=mp4]+ba[ext=m4a]",
+        "bv*+ba",
+        "bestvideo+bestaudio",
+        "best[vcodec!=none][acodec!=none]",
+        "best",
+    ])
+
+
+def _download_video_subtitle_sidecars(
+    video_url: str,
+    stem: Path,
+    languages: List[str],
+    automatic: bool,
+) -> Tuple[List[Path], List[str]]:
+    import yt_dlp
+
+    failures: List[str] = []
+    downloaded: List[Path] = []
+    ydl_opts = {
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "writesubtitles": False,
+        "writeautomaticsub": False,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+    except Exception as error:
+        return [], [f"Subtitle metadata failed: {error}"]
+
+    manual_tracks = info.get("subtitles") or {}
+    auto_tracks = info.get("automatic_captions") or {}
+    preferred_sources = [auto_tracks, manual_tracks] if automatic else [manual_tracks, auto_tracks]
+    for language in languages:
+        track = None
+        resolved_language = language
+        for source in preferred_sources:
+            resolved_language, track = _choose_subtitle_track(source, language)
+            if track is not None:
+                break
+        if track is None:
+            failures.append(f"No subtitle track found for {language}")
+            continue
+
+        ext = str(track.get("ext") or "vtt").lower()
+        if ext not in {"vtt", "srt", "ass", "ssa"}:
+            ext = "vtt"
+        label = safe_filename(f"{stem.name}.{resolved_language}{'.auto' if automatic else ''}", max_len=200)
+        target = unique_path(stem.with_name(f"{label}.{ext}"))
+        try:
+            _emit_progress({
+                "event": "download",
+                "status": "subtitle",
+                "percent": None,
+                "filename": target.name,
+            })
+            download_to_file(track["url"], target, timeout=45)
+            downloaded.append(target)
+        except Exception as error:
+            failures.append(f"{resolved_language}: {error}")
+    return downloaded, failures
+
+
+def _choose_subtitle_track(source: Dict[str, Any], language: str) -> Tuple[str, Optional[Dict[str, Any]]]:
+    if not source:
+        return language, None
+    language_lower = language.lower()
+    matching_key = None
+    for key in source.keys():
+        key_lower = str(key).lower()
+        if key_lower == language_lower or key_lower.startswith(language_lower):
+            matching_key = key
+            break
+    if matching_key is None:
+        return language, None
+
+    tracks = source.get(matching_key) or []
+    if not isinstance(tracks, list):
+        return str(matching_key), None
+    best = None
+    for candidate in tracks:
+        if not isinstance(candidate, dict) or not candidate.get("url"):
+            continue
+        ext = str(candidate.get("ext") or "").lower()
+        if best is None or ext in ("vtt", "srt"):
+            best = candidate
+            if ext == "vtt":
+                break
+    return str(matching_key), best
+
+
+def _subtitle_language_from_filename(name: str) -> str:
+    parts = name.split(".")
+    if len(parts) >= 4 and parts[-2].lower() == "auto":
+        return parts[-3]
+    if len(parts) >= 3:
+        return parts[-2]
+    return ""
+
+
+def download_youtube_music(
+    item_json: Any,
+    output_dir: Optional[str] = None,
+    video: bool = False,
+    quality_height: Optional[int] = None,
+    quality_heights: Optional[List[int]] = None,
+    write_subtitles: bool = False,
+    subtitle_lang: Optional[str] = None,
+    subtitle_langs: Optional[List[str]] = None,
+    auto_subtitles: bool = False,
+    subtitles_only: bool = False,
+) -> str:
     """Download a search result and return a JSON payload for Flutter."""
     if isinstance(item_json, str):
         item_data = json.loads(item_json)
@@ -951,17 +1455,189 @@ def download_youtube_music(item_json: Any, output_dir: Optional[str] = None) -> 
     download_dir = Path(output_dir).expanduser().resolve() if output_dir else DOWNLOAD_DIR
     downloader = MediaDownloader(download_dir=download_dir, progress_cb=_emit_progress)
     item = _search_item_from_dict(item_data)
-    files = downloader.download(item)
+    if subtitles_only and str(item.result_type or "").lower() == "video":
+        files = _download_youtube_video_subtitles_only(
+            item,
+            download_dir,
+            subtitle_lang=subtitle_lang,
+            subtitle_langs=subtitle_langs,
+            auto_subtitles=auto_subtitles,
+        )
+    elif video and str(item.result_type or "").lower() == "video":
+        files = _download_youtube_video_file(
+            item,
+            download_dir,
+            quality_height=quality_height,
+            quality_heights=quality_heights,
+            write_subtitles=write_subtitles,
+            subtitle_lang=subtitle_lang,
+            subtitle_langs=subtitle_langs,
+            auto_subtitles=auto_subtitles,
+        )
+    else:
+        files = downloader.download(item)
     payload = {
         "files": [str(path) for path in files],
+        "libraryFiles": _library_files_for_download(files) if video or subtitles_only else [str(path) for path in files],
         "downloadDir": str(download_dir),
-        "message": "Downloaded from YouTube Music",
+        "message": _download_message(files, video or subtitles_only),
         "downloadedAt": datetime.now().isoformat(timespec="seconds"),
     }
     return json.dumps(payload, ensure_ascii=True)
 
 
-def stream_youtube_music(item_json: Any) -> str:
+def _library_files_for_download(files: List[Path]) -> List[str]:
+    media_suffixes = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".mp3", ".m4a", ".wav", ".flac"}
+    return [
+        str(path)
+        for path in files
+        if path.suffix.lower() in media_suffixes
+    ][:1]
+
+
+def _download_message(files: List[Path], video: bool) -> str:
+    if not video:
+        return "Downloaded from YouTube Music"
+    quality_count = len([path for path in files if path.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov", ".m4v"}])
+    subtitle_count = len([path for path in files if path.suffix.lower() in {".vtt", ".srt", ".ass", ".ssa"}])
+    if quality_count == 0 and subtitle_count > 0:
+        return f"Downloaded {subtitle_count} subtitle file{'s' if subtitle_count != 1 else ''}."
+    quality_word = "quality" if quality_count == 1 else "qualities"
+    return f"Downloaded {quality_count} video {quality_word}" + (
+        f" and {subtitle_count} subtitle file{'s' if subtitle_count != 1 else ''}." if subtitle_count else "."
+    )
+
+
+def _video_quality_label(height: Any) -> str:
+    try:
+        value = int(height or 0)
+    except Exception:
+        value = 0
+    return f"{value}p" if value > 0 else "Auto"
+
+
+def _select_video_format(info: Dict[str, Any], max_height: Optional[int]) -> Dict[str, Any]:
+    formats = info.get("formats") or []
+    usable: List[Dict[str, Any]] = []
+    for fmt in formats:
+        if not isinstance(fmt, dict):
+            continue
+        if not fmt.get("url"):
+            continue
+        if fmt.get("vcodec") in (None, "none") or fmt.get("acodec") in (None, "none"):
+            continue
+        height = int(fmt.get("height") or 0)
+        if height <= 0:
+            continue
+        usable.append(fmt)
+
+    if not usable:
+        return info
+
+    usable.sort(
+        key=lambda fmt: (
+            int(fmt.get("height") or 0),
+            int(fmt.get("tbr") or 0),
+        ),
+        reverse=True,
+    )
+    if max_height and max_height > 0:
+        capped = [fmt for fmt in usable if int(fmt.get("height") or 0) <= max_height]
+        if capped:
+            return capped[0]
+    return usable[0]
+
+
+def _collect_video_qualities(info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    by_height: Dict[int, Dict[str, Any]] = {}
+    for fmt in info.get("formats") or []:
+        if not isinstance(fmt, dict):
+            continue
+        if not fmt.get("url"):
+            continue
+        if fmt.get("vcodec") in (None, "none"):
+            continue
+        height = int(fmt.get("height") or 0)
+        if height <= 0:
+            continue
+        current = by_height.get(height)
+        has_audio = fmt.get("acodec") not in (None, "none")
+        current_has_audio = current and current.get("acodec") not in (None, "none")
+        if (
+            current is None
+            or (has_audio and not current_has_audio)
+            or (
+                has_audio == current_has_audio
+                and int(fmt.get("tbr") or 0) > int(current.get("tbr") or 0)
+            )
+        ):
+            by_height[height] = fmt
+
+    qualities: List[Dict[str, Any]] = []
+    for height, fmt in sorted(by_height.items(), reverse=True):
+        qualities.append(
+            {
+                "label": _video_quality_label(height),
+                "height": height,
+                "url": fmt.get("url", ""),
+                "formatId": str(fmt.get("format_id") or ""),
+                "ext": str(fmt.get("ext") or ""),
+                "hasAudio": fmt.get("acodec") not in (None, "none"),
+            }
+        )
+    return qualities
+
+
+def _collect_subtitles(info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    subtitles: List[Dict[str, Any]] = []
+
+    def add_tracks(source: Dict[str, Any], automatic: bool) -> None:
+        for language, tracks in (source or {}).items():
+            if not isinstance(tracks, list):
+                continue
+            best = None
+            for track in tracks:
+                if not isinstance(track, dict) or not track.get("url"):
+                    continue
+                ext = str(track.get("ext") or "").lower()
+                if best is None or ext in ("vtt", "srt"):
+                    best = track
+                    if ext == "vtt":
+                        break
+            if best is None:
+                continue
+            subtitles.append(
+                {
+                    "language": str(language),
+                    "label": f"{language}{' auto' if automatic else ''}",
+                    "url": best.get("url", ""),
+                    "automatic": automatic,
+                }
+            )
+
+    add_tracks(info.get("subtitles") or {}, False)
+    add_tracks(info.get("automatic_captions") or {}, True)
+
+    seen = set()
+    deduped = []
+    preferred_prefixes = ("en", "cs", "sk")
+    for item in sorted(
+        subtitles,
+        key=lambda sub: (
+            0 if str(sub.get("language", "")).lower().startswith(preferred_prefixes) else 1,
+            1 if sub.get("automatic") else 0,
+            str(sub.get("language", "")),
+        ),
+    ):
+        key = (item.get("language"), item.get("automatic"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped[:20]
+
+
+def stream_youtube_music(item_json: Any, quality_height: Optional[int] = None) -> str:
     """Resolve a playable audio stream URL for a search result."""
     if isinstance(item_json, str):
         item_data = json.loads(item_json)
@@ -1000,9 +1676,13 @@ def stream_youtube_music(item_json: Any) -> str:
         "no_warnings": True,
         "noplaylist": True,
         "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+
+    selected_format = _select_video_format(info, quality_height) if is_video else info
 
     info_thumbnails = {"thumbnails": info.get("thumbnails") or [{"url": info.get("thumbnail", "")}]}
     preview_thumb = (
@@ -1012,20 +1692,43 @@ def stream_youtube_music(item_json: Any) -> str:
         or info.get("thumbnail", "")
     )
     payload = {
-        "url": info.get("url", ""),
+        "url": selected_format.get("url", "") or info.get("url", ""),
         "title": item.title or info.get("title", "YouTube Music"),
         "artist": item.artist or info.get("uploader", "YouTube Music"),
         "album": item.raw.get("album", {}).get("name", "") if isinstance(item.raw.get("album"), dict) else "",
         "thumbnailUrl": preview_thumb,
-        "durationSeconds": info.get("duration") or 0,
+        "durationSeconds": extract_duration_seconds(item.raw or {}, info) or 0,
         "videoId": video_id,
         "isVideo": is_video,
+        "qualityLabel": _video_quality_label(selected_format.get("height")) if is_video else "Audio",
+        "qualities": _collect_video_qualities(info) if is_video else [],
+        "subtitles": _collect_subtitles(info) if is_video else [],
     }
     return json.dumps(payload, ensure_ascii=True)
 
 
 def _emit_progress(payload: Dict[str, Any]) -> None:
     print(json.dumps(payload, ensure_ascii=True), file=sys.stderr, flush=True)
+
+
+def _parse_int_list(value: Optional[str]) -> List[int]:
+    if not value:
+        return []
+    result: List[int] = []
+    for part in str(value).split(","):
+        try:
+            parsed = int(part.strip())
+        except Exception:
+            continue
+        if parsed > 0:
+            result.append(parsed)
+    return result
+
+
+def _parse_text_list(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return [part.strip() for part in str(value).split(",") if part.strip()]
 
 
 def _main() -> int:
@@ -1044,9 +1747,18 @@ def _main() -> int:
     download_parser = subparsers.add_parser("download")
     download_parser.add_argument("--item-json", required=True)
     download_parser.add_argument("--output-dir", required=True)
+    download_parser.add_argument("--video", action="store_true")
+    download_parser.add_argument("--quality-height", type=int, default=None)
+    download_parser.add_argument("--quality-heights", default=None)
+    download_parser.add_argument("--write-subtitles", action="store_true")
+    download_parser.add_argument("--subtitle-lang", default=None)
+    download_parser.add_argument("--subtitle-langs", default=None)
+    download_parser.add_argument("--auto-subtitles", action="store_true")
+    download_parser.add_argument("--subtitles-only", action="store_true")
 
     stream_parser = subparsers.add_parser("stream")
     stream_parser.add_argument("--item-json", required=True)
+    stream_parser.add_argument("--quality-height", type=int, default=None)
 
     args = parser.parse_args()
     if args.command == "add":
@@ -1054,9 +1766,20 @@ def _main() -> int:
     elif args.command == "search":
         print(search_youtube_music(args.query, args.filter, args.limit))
     elif args.command == "download":
-        print(download_youtube_music(args.item_json, args.output_dir))
+        print(download_youtube_music(
+            args.item_json,
+            args.output_dir,
+            video=args.video,
+            quality_height=args.quality_height,
+            quality_heights=_parse_int_list(args.quality_heights),
+            write_subtitles=args.write_subtitles,
+            subtitle_lang=args.subtitle_lang,
+            subtitle_langs=_parse_text_list(args.subtitle_langs),
+            auto_subtitles=args.auto_subtitles,
+            subtitles_only=args.subtitles_only,
+        ))
     elif args.command == "stream":
-        print(stream_youtube_music(args.item_json))
+        print(stream_youtube_music(args.item_json, args.quality_height))
     return 0
 
 

@@ -1,4 +1,4 @@
-name: PlayerVf
+name: player_vf
 description: "A cross-platform music player with system music folder scanning."
 publish_to: 'none'
 version: 1.0.0+1
@@ -19,6 +19,7 @@ dependencies:
   # Path utilities
   path: ^1.8.3
   path_provider: ^2.1.1
+  crypto: ^3.0.3
   # Local storage
   shared_preferences: ^2.2.2
   # Database for cachingflutter build apk --release
@@ -42,6 +43,13 @@ dependencies:
   media_kit_libs_video: any
   palette_generator: ^0.3.3+6
   image: ^4.2.0
+  audio_service: ^0.18.17
+  just_audio: ^0.9.46
+  audio_session: ^0.1.25
+  smtc_windows: ^1.0.0
+  rxdart: ^0.28.0
+  just_audio_windows: ^0.2.3
+  window_manager: ^0.3.9
 
 dev_dependencies:
   flutter_test:

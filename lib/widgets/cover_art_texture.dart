@@ -1,12 +1,17 @@
 import 'dart:io' as io;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+
+import '../services/performance_policy.dart';
 
 class CoverArtTexture extends StatelessWidget {
   final String coverArtPath;
   final double width;
   final double height;
   final BorderRadius? borderRadius;
+  final FilterQuality? filterQuality;
+  final double? cacheScale;
 
   const CoverArtTexture({
     super.key,
@@ -14,13 +19,20 @@ class CoverArtTexture extends StatelessWidget {
     this.width = 200,
     this.height = 200,
     this.borderRadius,
+    this.filterQuality,
+    this.cacheScale,
   });
 
   @override
   Widget build(BuildContext context) {
+    final policy = PerformancePolicy.of(context);
+    final resolvedFilterQuality = policy.resolveFilterQuality(filterQuality);
+    final resolvedCacheScale = cacheScale == null
+        ? policy.coverCacheScale
+        : cacheScale!.clamp(0.75, policy.coverCacheScale);
+
     if (coverArtPath.isNotEmpty) {
-      if (coverArtPath.startsWith('http://') ||
-          coverArtPath.startsWith('https://')) {
+      if (_isBrowserImage(coverArtPath)) {
         return ClipRRect(
           borderRadius: borderRadius ?? BorderRadius.zero,
           child: _NetworkCoverArt(
@@ -28,32 +40,50 @@ class CoverArtTexture extends StatelessWidget {
             width: width,
             height: height,
             fallback: _buildDefaultCover(),
+            filterQuality: resolvedFilterQuality,
+            cacheScale: resolvedCacheScale,
           ),
         );
       }
 
-      final file = io.File(coverArtPath);
-      // We still check if file exists to avoid showing errorBuilder immediately
-      if (file.existsSync()) {
-        return ClipRRect(
+      if (kIsWeb) {
+        return _buildDefaultCover();
+      }
+
+      return RepaintBoundary(
+        child: ClipRRect(
           borderRadius: borderRadius ?? BorderRadius.zero,
           child: Image.file(
-            file,
+            io.File(coverArtPath),
             width: width,
             height: height,
+            cacheWidth: _cacheExtent(width, resolvedCacheScale),
+            cacheHeight: _cacheExtent(height, resolvedCacheScale),
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            filterQuality: FilterQuality.high,
+            filterQuality: resolvedFilterQuality,
             isAntiAlias: true,
             errorBuilder: (context, error, stackTrace) {
               return _buildDefaultCover();
             },
           ),
-        );
-      }
+        ),
+      );
     }
 
     return _buildDefaultCover();
+  }
+
+  bool _isBrowserImage(String path) {
+    return path.startsWith('http://') ||
+        path.startsWith('https://') ||
+        path.startsWith('blob:') ||
+        path.startsWith('data:image/');
+  }
+
+  int? _cacheExtent(double value, double multiplier) {
+    if (!value.isFinite || value <= 0) return null;
+    return (value * multiplier).clamp(96, 900).round();
   }
 
   Widget _buildDefaultCover() {
@@ -90,12 +120,16 @@ class _NetworkCoverArt extends StatefulWidget {
   final double width;
   final double height;
   final Widget fallback;
+  final FilterQuality filterQuality;
+  final double cacheScale;
 
   const _NetworkCoverArt({
     required this.url,
     required this.width,
     required this.height,
     required this.fallback,
+    required this.filterQuality,
+    required this.cacheScale,
   });
 
   @override
@@ -132,8 +166,10 @@ class _NetworkCoverArtState extends State<_NetworkCoverArt> {
         width: widget.width,
         height: widget.height,
         fit: BoxFit.cover,
+        cacheWidth: _cacheExtent(widget.width, widget.cacheScale),
+        cacheHeight: _cacheExtent(widget.height, widget.cacheScale),
         gaplessPlayback: true,
-        filterQuality: FilterQuality.high,
+        filterQuality: widget.filterQuality,
         isAntiAlias: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) return child;
@@ -149,6 +185,11 @@ class _NetworkCoverArtState extends State<_NetworkCoverArt> {
         },
       ),
     );
+  }
+
+  static int? _cacheExtent(double value, double multiplier) {
+    if (!value.isFinite || value <= 0) return null;
+    return (value * multiplier).clamp(96, 900).round();
   }
 
   static List<String> _coverCandidates(String rawUrl) {

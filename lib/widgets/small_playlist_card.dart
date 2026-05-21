@@ -21,14 +21,15 @@ class SmallPlaylistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final musicService = Provider.of<MusicService>(context);
+    final theme = Theme.of(context);
     final musicList = musicService.getMusicListForPlaylist(playlist.id);
 
     return GestureDetector(
       onTap: onTap,
       child: GlassContainer(
-        borderRadius: BorderRadius.circular(12.s),
-        color: Colors.grey[900]?.withOpacity(0.4),
-        blur: 15.0,
+        borderRadius: BorderRadius.circular(18.s),
+        color: null,
+        blur: 14.0,
         padding: EdgeInsets.all(12.s),
         child: Row(
           children: [
@@ -44,8 +45,10 @@ class SmallPlaylistCard extends StatelessWidget {
                 child: musicList.isNotEmpty && musicList[0].coverPath.isNotEmpty
                     ? CoverArtTexture(
                         coverArtPath: musicList[0].coverPath,
-                        width: double.infinity,
-                        height: double.infinity,
+                        width: 50.s,
+                        height: 50.s,
+                        filterQuality: FilterQuality.medium,
+                        cacheScale: 2.0,
                       )
                     : Icon(_getPlaylistIcon(playlist.id),
                         color: _getPlaylistColor(playlist.id), size: 24.s),
@@ -59,14 +62,16 @@ class SmallPlaylistCard extends StatelessWidget {
                   Text(
                     playlist.name,
                     style: TextStyle(
-                        color: Colors.white,
+                        color: theme.colorScheme.onSurface,
                         fontSize: 14.sp,
                         fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 4.h),
                   Text(
                     '${musicList.length} tracks',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12.sp),
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.58),
+                        fontSize: 12.sp),
                   ),
                 ],
               ),
@@ -80,8 +85,8 @@ class SmallPlaylistCard extends StatelessWidget {
               ),
             IconButton(
               iconSize: 30.s,
-              icon: const Icon(Icons.play_circle_fill_rounded,
-                  color: Colors.teal),
+              icon: Icon(Icons.play_circle_fill_rounded,
+                  color: theme.colorScheme.primary),
               onPressed: () => musicService.playPlaylist(playlist.id),
             ),
           ],

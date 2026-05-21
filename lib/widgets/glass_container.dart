@@ -1,5 +1,10 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/settings_model.dart';
+import '../services/performance_policy.dart';
 
 class GlassContainer extends StatelessWidget {
   final Widget child;
@@ -28,22 +33,35 @@ class GlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fallbackColor = theme.colorScheme.surfaceContainerHighest
-        .withOpacity(theme.brightness == Brightness.dark ? 0.46 : 0.62);
-    final borderColor = theme.colorScheme.outlineVariant
-        .withOpacity(theme.brightness == Brightness.dark ? 0.20 : 0.34);
+    final policy = PerformancePolicy.of(context);
+    final intensity = context.select<SettingsModel, double>(
+      (settings) => settings.glassEffect.clamp(0.0, 1.0),
+    );
+    final fallbackColor = _surfaceColor(theme, intensity);
+    final borderColor = theme.colorScheme.outlineVariant.withOpacity(
+      theme.brightness == Brightness.dark
+          ? 0.18 + (0.22 * intensity)
+          : 0.24 + (0.22 * intensity),
+    );
+    final guiBlur = policy.allowBackdropBlur
+        ? (blur * intensity).clamp(0.0, policy.maxGlassBlur)
+        : 0.0;
+    final effectiveColor = color == null
+        ? fallbackColor
+        : Color.lerp(fallbackColor, color!, 0.15 + (0.60 * intensity)) ??
+            fallbackColor;
 
     final innerContainer = Container(
       width: width,
       height: height,
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? fallbackColor,
+        color: effectiveColor,
         borderRadius: borderRadius,
         border: border ??
             Border.all(
               color: borderColor,
-              width: 1,
+              width: 0.7,
             ),
       ),
       child: child,
@@ -55,13 +73,26 @@ class GlassContainer extends StatelessWidget {
       margin: margin,
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: blur > 0
+        child: guiBlur > 0
             ? BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                filter: ImageFilter.blur(sigmaX: guiBlur, sigmaY: guiBlur),
                 child: innerContainer,
               )
             : innerContainer,
       ),
     );
+  }
+
+  Color _surfaceColor(ThemeData theme, double intensity) {
+    final base = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHighest
+        : theme.colorScheme.surfaceContainerLow;
+
+    // 0 = flat/readable solid surface. 100 = glassy but still visible.
+    final opacity = theme.brightness == Brightness.dark
+        ? 0.90 - (0.36 * intensity)
+        : 0.96 - (0.28 * intensity);
+
+    return base.withOpacity(opacity.clamp(0.54, 0.96));
   }
 }

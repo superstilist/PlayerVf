@@ -3,20 +3,30 @@ import 'package:provider/provider.dart';
 
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
+import '../services/performance_policy.dart';
 import '../services/responsive.dart';
 import '../widgets/music_card.dart';
 
 class FavoritePage extends StatelessWidget {
   final String searchQuery;
+  final VoidCallback? onOpenPlayer;
 
-  const FavoritePage({super.key, this.searchQuery = ''});
+  const FavoritePage({
+    super.key,
+    this.searchQuery = '',
+    this.onOpenPlayer,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Consumer2<MusicService, SettingsModel>(
       builder: (context, musicService, settings, child) {
-        final crossAxisCount = _calculateAdaptiveCrossAxisCount(Responsive.screenWidth);
+        final performance = PerformancePolicy.of(context);
+        final crossAxisCount =
+            _calculateAdaptiveCrossAxisCount(Responsive.screenWidth);
         final padding = settings.viewMode == ViewMode.list ? 0.0 : 16.w;
+        final listItemExtent =
+            ((64 * (settings.cardSize / 140.0)).clamp(48.0, 100.0) + 1).h;
 
         if (musicService.isLoadingSystemMusic) {
           return Center(
@@ -35,7 +45,9 @@ class FavoritePage extends StatelessWidget {
         }
 
         final favoriteMusicList = musicService.favoriteMusicList.where((music) {
-          return music.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          return music.title
+                  .toLowerCase()
+                  .contains(searchQuery.toLowerCase()) ||
               music.artist.toLowerCase().contains(searchQuery.toLowerCase());
         }).toList();
 
@@ -47,7 +59,9 @@ class FavoritePage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  isSearching ? Icons.search_off_rounded : Icons.favorite_border,
+                  isSearching
+                      ? Icons.search_off_rounded
+                      : Icons.favorite_border,
                   size: 80.s,
                   color: Colors.grey[600],
                 ),
@@ -70,6 +84,8 @@ class FavoritePage extends StatelessWidget {
 
         if (settings.viewMode == ViewMode.list) {
           return ListView.builder(
+            cacheExtent: performance.listCacheExtent,
+            itemExtent: listItemExtent,
             padding: const EdgeInsets.fromLTRB(0, 60, 0, 100),
             itemCount: favoriteMusicList.length,
             itemBuilder: (context, index) {
@@ -78,13 +94,19 @@ class FavoritePage extends StatelessWidget {
                 music: music,
                 viewMode: settings.viewMode,
                 heroPrefix: 'fav',
-                onTap: () => musicService.playMusicFromQueue(favoriteMusicList, music, playlistId: 'favorites'),
+                listIndex: index,
+                listLength: favoriteMusicList.length,
+                onTap: () => musicService.playMusicFromQueue(
+                    favoriteMusicList, music,
+                    playlistId: 'favorites'),
+                onOpen: onOpenPlayer,
               );
             },
           );
         }
 
         return GridView.builder(
+          cacheExtent: performance.listCacheExtent,
           padding: EdgeInsets.fromLTRB(padding, 60, padding, padding),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
@@ -98,7 +120,12 @@ class FavoritePage extends StatelessWidget {
             return MusicCard(
               music: music,
               viewMode: settings.viewMode,
-              onTap: () => musicService.playMusicFromQueue(favoriteMusicList, music, playlistId: 'favorites'),
+              heroPrefix: 'fav',
+              listIndex: index,
+              onTap: () => musicService.playMusicFromQueue(
+                  favoriteMusicList, music,
+                  playlistId: 'favorites'),
+              onOpen: onOpenPlayer,
             );
           },
         );

@@ -11,7 +11,13 @@ import '../services/responsive.dart';
 
 class PlaylistPage extends StatelessWidget {
   final String searchQuery;
-  const PlaylistPage({super.key, this.searchQuery = ''});
+  final VoidCallback? onOpenPlayer;
+
+  const PlaylistPage({
+    super.key,
+    this.searchQuery = '',
+    this.onOpenPlayer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -50,12 +56,18 @@ class PlaylistPage extends StatelessWidget {
                                     fontSize: 32.sp,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 0,
-                                    color: Colors.white),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface),
                               ),
                               Text(
                                 '${playlists.length} Playlists curated for you',
                                 style: TextStyle(
-                                    fontSize: 14.sp, color: Colors.white38),
+                                    fontSize: 14.sp,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.54)),
                               ),
                             ],
                           ),
@@ -112,7 +124,9 @@ class PlaylistPage extends StatelessWidget {
                                   context,
                                   MaterialPageRoute(
                                       builder: (_) => PlaylistDetailPage(
-                                          playlist: playlist)));
+                                            playlist: playlist,
+                                            onOpenPlayer: onOpenPlayer,
+                                          )));
                             },
                             onDelete: isSystem
                                 ? null
@@ -177,8 +191,8 @@ class PlaylistPage extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         content: GlassContainer(
           padding: const EdgeInsets.all(32),
-          borderRadius: BorderRadius.circular(32),
-          blur: 25,
+          borderRadius: BorderRadius.circular(24),
+          blur: 18,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

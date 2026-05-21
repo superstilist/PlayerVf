@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:palette_generator/palette_generator.dart';
 
@@ -43,7 +44,7 @@ class CoverColorService {
       return fallback;
     }
 
-    if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (_isNetworkPalettePath(path)) {
       try {
         final palette = await PaletteGenerator.fromImageProvider(
           NetworkImage(path),
@@ -61,6 +62,10 @@ class CoverColorService {
       } catch (_) {
         return fallback;
       }
+    }
+
+    if (kIsWeb) {
+      return fallback;
     }
 
     final file = File(path);
@@ -87,6 +92,13 @@ class CoverColorService {
     } catch (_) {
       return fallback;
     }
+  }
+
+  static bool _isNetworkPalettePath(String path) {
+    return path.startsWith('http://') ||
+        path.startsWith('https://') ||
+        path.startsWith('blob:') ||
+        path.startsWith('data:image/');
   }
 
   static CoverArtPalette _fromColor(Color dominant, {Color? accent}) {

@@ -5,6 +5,7 @@ import '../models/music_model.dart';
 import '../models/playlist_model.dart';
 import '../models/settings_model.dart';
 import '../services/music_service.dart';
+import '../services/performance_policy.dart';
 import '../services/responsive.dart';
 import '../widgets/music_card.dart';
 import '../widgets/cover_art_texture.dart';
@@ -13,8 +14,13 @@ import '../widgets/fade_in_up_animation.dart';
 
 class PlaylistDetailPage extends StatelessWidget {
   final Playlist playlist;
+  final VoidCallback? onOpenPlayer;
 
-  const PlaylistDetailPage({super.key, required this.playlist});
+  const PlaylistDetailPage({
+    super.key,
+    required this.playlist,
+    this.onOpenPlayer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +30,9 @@ class PlaylistDetailPage extends StatelessWidget {
         final currentMusic = musicService.currentMusic;
         final bgPath = currentMusic?.coverPath ??
             (musicList.isNotEmpty ? musicList.first.coverPath : '');
+        final performance = PerformancePolicy.of(context);
+        final listItemExtent =
+            ((64 * (settings.cardSize / 140.0)).clamp(48.0, 100.0) + 1).h;
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -42,14 +51,15 @@ class PlaylistDetailPage extends StatelessWidget {
               // ── Background Blur (Current Song) ──
               Positioned.fill(
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
+                  duration: const Duration(milliseconds: 360),
                   child: Stack(
                     key: ValueKey(bgPath),
                     children: [
                       CoverArtTexture(
                           coverArtPath: bgPath,
                           width: double.infinity,
-                          height: double.infinity),
+                          height: double.infinity,
+                          filterQuality: FilterQuality.medium),
                       Container(color: Colors.black.withOpacity(0.85)),
                     ],
                   ),
@@ -57,6 +67,7 @@ class PlaylistDetailPage extends StatelessWidget {
               ),
 
               CustomScrollView(
+                cacheExtent: performance.listCacheExtent,
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   // ── Header Section ──
@@ -73,10 +84,10 @@ class PlaylistDetailPage extends StatelessWidget {
                                 width: 220.s,
                                 height: 220.s,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(32.s),
+                                  borderRadius: BorderRadius.circular(24.s),
                                 ),
                                 child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(32.s),
+                                  borderRadius: BorderRadius.circular(24.s),
                                   child: _buildPlaylistCollage(musicList),
                                 ),
                               ),
@@ -121,15 +132,15 @@ class PlaylistDetailPage extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 28, vertical: 14),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(18)),
-                                  elevation: 8,
+                                      borderRadius: BorderRadius.circular(20)),
+                                  elevation: 0,
                                 ),
                               ),
                               const SizedBox(width: 12),
                               IconButton(
                                 icon: GlassContainer(
                                   padding: const EdgeInsets.all(12),
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   color: Colors.white.withOpacity(0.08),
                                   child: const Icon(Icons.edit_note_rounded,
                                       color: Colors.white, size: 24),
@@ -174,9 +185,12 @@ class PlaylistDetailPage extends StatelessWidget {
                                       music: music,
                                       viewMode: ViewMode.card,
                                       heroPrefix: 'playlist-detail',
+                                      listIndex: index,
                                       onTap: () => musicService
                                           .playMusicFromQueue(musicList, music,
                                               playlistId: playlist.id),
+                                      onOpen: () =>
+                                          _openPlayerFromDetail(context),
                                       onDelete: () =>
                                           musicService.removeMusicFromPlaylist(
                                               playlist.id, music.id),
@@ -186,7 +200,8 @@ class PlaylistDetailPage extends StatelessWidget {
                                 childCount: musicList.length,
                               ),
                             )
-                          : SliverList(
+                          : SliverFixedExtentList(
+                              itemExtent: listItemExtent,
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
                                   final music = musicList[index];
@@ -196,9 +211,13 @@ class PlaylistDetailPage extends StatelessWidget {
                                       music: music,
                                       viewMode: ViewMode.list,
                                       heroPrefix: 'playlist-detail',
+                                      listIndex: index,
+                                      listLength: musicList.length,
                                       onTap: () => musicService
                                           .playMusicFromQueue(musicList, music,
                                               playlistId: playlist.id),
+                                      onOpen: () =>
+                                          _openPlayerFromDetail(context),
                                       onDelete: () =>
                                           musicService.removeMusicFromPlaylist(
                                               playlist.id, music.id),
@@ -219,6 +238,13 @@ class PlaylistDetailPage extends StatelessWidget {
     );
   }
 
+  void _openPlayerFromDetail(BuildContext context) {
+    final open = onOpenPlayer;
+    if (open == null) return;
+    Navigator.of(context).maybePop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => open());
+  }
+
   Widget _buildPlaylistCollage(List<Music> musicList) {
     if (musicList.isEmpty) {
       return Container(
@@ -231,45 +257,61 @@ class PlaylistDetailPage extends StatelessWidget {
     if (musicList.length < 4) {
       return CoverArtTexture(
           coverArtPath: musicList[0].coverPath,
-          width: double.infinity,
-          height: double.infinity);
+          width: 220.s,
+          height: 220.s,
+          filterQuality: FilterQuality.high,
+          cacheScale: 2.2);
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                  child: CoverArtTexture(
-                      coverArtPath: musicList[0].coverPath,
-                      width: double.infinity,
-                      height: double.infinity)),
-              Expanded(
-                  child: CoverArtTexture(
-                      coverArtPath: musicList[1].coverPath,
-                      width: double.infinity,
-                      height: double.infinity)),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                  child: CoverArtTexture(
-                      coverArtPath: musicList[2].coverPath,
-                      width: double.infinity,
-                      height: double.infinity)),
-              Expanded(
-                  child: CoverArtTexture(
-                      coverArtPath: musicList[3].coverPath,
-                      width: double.infinity,
-                      height: double.infinity)),
-            ],
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tileWidth = constraints.maxWidth / 2;
+        final tileHeight = constraints.maxHeight / 2;
+        return Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[0].coverPath,
+                          width: tileWidth,
+                          height: tileHeight,
+                          filterQuality: FilterQuality.high,
+                          cacheScale: 2.2)),
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[1].coverPath,
+                          width: tileWidth,
+                          height: tileHeight,
+                          filterQuality: FilterQuality.high,
+                          cacheScale: 2.2)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[2].coverPath,
+                          width: tileWidth,
+                          height: tileHeight,
+                          filterQuality: FilterQuality.high,
+                          cacheScale: 2.2)),
+                  Expanded(
+                      child: CoverArtTexture(
+                          coverArtPath: musicList[3].coverPath,
+                          width: tileWidth,
+                          height: tileHeight,
+                          filterQuality: FilterQuality.high,
+                          cacheScale: 2.2)),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -289,7 +331,7 @@ class PlaylistDetailPage extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         content: GlassContainer(
           padding: const EdgeInsets.all(24),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

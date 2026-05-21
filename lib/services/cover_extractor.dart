@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'dart:io' as io;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as path;
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/cover_model.dart';
 import '../services/id3_parser.dart';
@@ -16,7 +16,7 @@ class CoverExtractor {
     if (kIsWeb) {
       return null;
     }
-    
+
     try {
       final file = io.File(filePath);
       if (!await file.exists()) {
@@ -27,7 +27,7 @@ class CoverExtractor {
       final Uint8List? coverData = _id3Parser.extractCover(tags);
 
       if (coverData == null || coverData.isEmpty) {
-        print('No cover art found for $filePath');
+        debugPrint('No cover art found for $filePath');
         return null;
       }
 
@@ -40,7 +40,7 @@ class CoverExtractor {
         imageData: coverData,
       );
     } catch (e) {
-      print('Error extracting cover: $e');
+      debugPrint('Error extracting cover: $e');
       return null;
     }
   }
@@ -51,17 +51,18 @@ class CoverExtractor {
     if (kIsWeb) {
       return null;
     }
-    
+
     try {
       // For Windows, we need to handle asset files differently
       // First, try to get the actual file path from asset
       final tempDir = await io.Directory.systemTemp.createTemp('fluttersp');
-      final tempFile = io.File('${tempDir.path}/${path.basename(musicFilePath)}');
-      
+      final tempFile =
+          io.File('${tempDir.path}/${path.basename(musicFilePath)}');
+
       // Copy asset to temp file
       final ByteData byteData = await rootBundle.load(musicFilePath);
       await tempFile.writeAsBytes(byteData.buffer.asUint8List());
-      
+
       // Extract metadata from temp file
       final tags = await _id3Parser.parseTagsFromFile(tempFile.path);
       final Uint8List? coverData = _id3Parser.extractCover(tags);
@@ -71,7 +72,7 @@ class CoverExtractor {
       await tempDir.delete();
 
       if (coverData == null || coverData.isEmpty) {
-        print('No cover art found in asset: $musicFilePath');
+        debugPrint('No cover art found in asset: $musicFilePath');
         return null;
       }
 
@@ -84,7 +85,7 @@ class CoverExtractor {
         imageData: coverData,
       );
     } catch (e) {
-      print('Error extracting cover from asset: $e');
+      debugPrint('Error extracting cover from asset: $e');
       return null;
     }
   }

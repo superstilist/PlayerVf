@@ -1,5 +1,4 @@
 import 'dart:core';
-import 'music_model.dart';
 
 class Playlist {
   final String id;

@@ -23,6 +23,47 @@ def _safe_filename(name, max_len=160):
     return (name[:max_len] if len(name) > max_len else name) or "download"
 
 
+def _duration_seconds(value):
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        seconds = int(value)
+        return seconds if seconds > 0 else 0
+
+    text = str(value).strip()
+    if not text or text.lower() == "none":
+        return 0
+    if text.isdigit():
+        number = int(text)
+        return number // 1000 if number > 10000 else number
+    if ":" in text:
+        parts = text.split(":")
+        if 2 <= len(parts) <= 3 and all(part.strip().isdigit() for part in parts):
+            total = 0
+            for part in parts:
+                total = (total * 60) + int(part.strip())
+            return total
+    return 0
+
+
+def _extract_duration_seconds(*items):
+    keys = ("duration", "durationSeconds", "lengthSeconds", "approxDurationMs", "duration_ms")
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for key in keys:
+            seconds = _duration_seconds(item.get(key))
+            if seconds > 0:
+                return seconds
+        video_details = item.get("videoDetails")
+        if isinstance(video_details, dict):
+            for key in keys:
+                seconds = _duration_seconds(video_details.get(key))
+                if seconds > 0:
+                    return seconds
+    return 0
+
+
 def _unique_stem(path):
     suffixes = (".mp3", ".m4a", ".webm", ".opus", ".ogg", ".aac")
     temp_suffixes = tuple(f".temp{suffix}" for suffix in suffixes) + (".part",)
@@ -168,17 +209,17 @@ def _delete_sidecar_images(media_path):
                 pass
 
 
-def _write_media_tags(media_path, title, artist, album, video_id, cover=None):
+def _write_media_tags(media_path, title, artist, album, video_id, cover=None, track_no=None, total_tracks=None):
     suffix = media_path.suffix.lower()
     if suffix == ".mp3":
-        from mutagen.id3 import APIC, COMM, ID3, TALB, TIT2, TPE1
+        from mutagen.id3 import APIC, COMM, ID3, TALB, TIT2, TPE1, TLEN, TRCK
         from mutagen.mp3 import MP3
 
         audio = MP3(str(media_path), ID3=ID3)
         if audio.tags is None:
             audio.add_tags()
         tags = audio.tags
-        for frame in ("TIT2", "TPE1", "TALB", "COMM", "APIC"):
+        for frame in ("TIT2", "TPE1", "TALB", "TRCK", "TLEN", "COMM", "APIC"):
             try:
                 tags.delall(frame)
             except Exception:
@@ -187,6 +228,12 @@ def _write_media_tags(media_path, title, artist, album, video_id, cover=None):
         tags.add(TPE1(encoding=3, text=artist))
         if album:
             tags.add(TALB(encoding=3, text=album))
+        if track_no is not None:
+            track_text = f"{track_no}/{total_tracks}" if total_tracks is not None else str(track_no)
+            tags.add(TRCK(encoding=3, text=track_text))
+        audio_duration = getattr(audio.info, "length", 0) or 0
+        if audio_duration > 0:
+            tags.add(TLEN(encoding=3, text=str(int(audio_duration * 1000))))
         tags.add(COMM(encoding=3, lang="eng", desc="Comment", text=f"Downloaded from YouTube Music. videoId={video_id}"))
         if cover:
             data, mime = cover
@@ -202,6 +249,8 @@ def _write_media_tags(media_path, title, artist, album, video_id, cover=None):
         audio["\xa9ART"] = [artist]
         if album:
             audio["\xa9alb"] = [album]
+        if track_no is not None:
+            audio["trkn"] = [(int(track_no), int(total_tracks or 0))]
         audio["----:com.apple.iTunes:videoId"] = [str(video_id).encode("utf-8")]
         if cover:
             data, mime = cover
@@ -216,7 +265,7 @@ def _search_item(item, fallback_type):
         "resultType": result_type,
         "title": item.get("title") or "Unknown title",
         "artist": _artist_text(item),
-        "duration": item.get("duration") or "",
+        "duration": item.get("duration") or str(_extract_duration_seconds(item) or ""),
         "videoId": item.get("videoId") or "",
         "browseId": item.get("browseId") or "",
         "thumbnailUrl": _best_thumbnail(item),
@@ -313,7 +362,16 @@ def _download_track(
     _delete_sidecar_images(media_path)
     tag_cover = cover if cover is not None else _cover_bytes(track, fallback_cover_entity, info)
     try:
-        _write_media_tags(media_path, title, artist, album, video_id, cover=tag_cover)
+        _write_media_tags(
+            media_path,
+            title,
+            artist,
+            album,
+            video_id,
+            cover=tag_cover,
+            track_no=index,
+            total_tracks=total,
+        )
     except Exception:
         pass
 
@@ -323,6 +381,7 @@ def _download_track(
         "artist": artist,
         "album": album,
         "videoId": video_id,
+        "durationSeconds": _extract_duration_seconds(track, info),
         "extractor": info.get("extractor", ""),
     }
 
@@ -459,7 +518,7 @@ def stream_youtube_music(item_json):
         "artist": item.get("artist") or _artist_text(raw) or info.get("uploader") or "YouTube Music",
         "album": album.get("name", "") if isinstance(album, dict) else "",
         "thumbnailUrl": preview_thumb,
-        "durationSeconds": info.get("duration") or 0,
+        "durationSeconds": _extract_duration_seconds(raw, info),
         "videoId": video_id,
         "isVideo": is_video,
     }

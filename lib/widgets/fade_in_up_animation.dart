@@ -27,13 +27,13 @@ class _FadeInUpAnimationState extends State<FadeInUpAnimation>
     super.initState();
 
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 360),
       vsync: this,
     );
 
     final curve = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: Curves.easeOutQuart,
     );
 
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(curve);
