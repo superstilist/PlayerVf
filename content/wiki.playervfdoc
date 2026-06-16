@@ -1,0 +1,26 @@
+@format PlayerVFDoc/2
+@title PlayerVF Full Wiki
+@description Full PlayerVF documentation generated from PlayerVFDoc partial files.
+@hero-label Full source wiki
+@hero-title PlayerVF developer documentation.
+@hero-lead This page is generated from small PlayerVFDoc partial files. Edit the files under content/wiki and run scripts/build-wiki.mjs to rebuild the static GitHub Pages wiki.
+@source C:\Users\superstilist\Desktop\playervf\FEATURES_AND_FUNCTIONS_FULL.md
+@source C:\Users\superstilist\Desktop\playervf\lib
+
+@stat 12 | Main wiki sections
+@stat 94 | Function index entries
+@stat lib | Source tree documented
+@stat Photos | Image blocks supported
+
+@include wiki/overview.playervfpart
+@include wiki/repo-stats.playervfpart
+@include wiki/architecture.playervfpart
+@include wiki/models.playervfpart
+@include wiki/main.playervfpart
+@include wiki/pages.playervfpart
+@include wiki/services.playervfpart
+@include wiki/widgets.playervfpart
+@include wiki/python.playervfpart
+@include wiki/flows.playervfpart
+@include wiki/function-index.playervfpart
+@include wiki/future.playervfpart
