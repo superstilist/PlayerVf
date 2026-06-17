@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if [[ -z "${PULSE_SERVER:-}" && -S /mnt/wslg/PulseServer ]]; then
+  export PULSE_SERVER="unix:/mnt/wslg/PulseServer"
+fi
+if [[ -z "${XDG_RUNTIME_DIR:-}" && -d "/run/user/$(id -u)" ]]; then
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+fi
+export PLAYER_VF_LINUX_AUDIO_OUTPUTS="${PLAYER_VF_LINUX_AUDIO_OUTPUTS:-pulse,pipewire,alsa}"
+export LD_LIBRARY_PATH="$DIR/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$DIR/mpv.real" "$@"

@@ -1,0 +1,86 @@
+name: player_vf
+description: "A cross-platform music player with system music folder scanning."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Audio playback
+  media_kit: ^1.1.10
+  media_kit_video:
+    path: third_party/media_kit_video_windows_threadfix
+  media_kit_libs_android_video: ^1.0.4
+  # State management
+  provider: ^6.1.1
+  # Path utilities
+  path: ^1.8.3
+  path_provider: ^2.1.1
+  crypto: ^3.0.3
+  # Local storage
+  shared_preferences: ^2.2.2
+  # Database for cachingflutter build apk --release
+  sqflite: ^2.3.0
+  # ID3 tag parsing
+  id3: ^1.0.2
+  # File picker for custom directories
+  file_picker: ^8.0.0
+  # Permission handling for mobile
+  permission_handler: ^11.3.0
+  # Media metadata reader for all audio formats
+  flutter_media_metadata: ^1.0.0
+  # Concurrency and background processing
+  async: ^2.11.0
+  # Device information
+  device_info_plus: ^9.1.2
+  # Media store access for Android 10+
+  on_audio_query: ^2.9.0
+  sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.5.41
+  media_kit_libs_video: any
+  palette_generator: ^0.3.3+6
+  image: ^4.2.0
+  audio_service: ^0.18.17
+  just_audio: ^0.9.46
+  audio_session: ^0.1.25
+  smtc_windows: ^1.0.0
+  rxdart: ^0.28.0
+  just_audio_windows: ^0.2.3
+  window_manager: ^0.3.9
+  ffmpeg_kit_flutter_new: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: "^0.14.4"
+  flutter_lints: ^3.0.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - lib/python/api.py
+    - lib/python/requirements.txt
+
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+    - family: NotoSansJP
+      fonts:
+        - asset: assets/fonts/NotoSansJP-Regular.otf
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Regular.otf

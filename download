@@ -1,0 +1,10 @@
+latest:
+  windows: https://github.com/superstilist/PlayerVf/releases/download/Release_V1/playervf.exe
+  android: https://github.com/superstilist/PlayerVf/releases/download/Release_V1/playervf.apk
+  linux: https://github.com/superstilist/PlayerVf/releases/download/Release_V1/playervf.linux.zip
+        linux-install-script: https://github.com/superstilist/PlayerVf/releases/download/Release_V1/playervf.linux.zip
+  mac-os: https://github.com/superstilist/PlayerVf/releases/download/Release_V1/playervf.app.zip
+new-gen(betav3):
+  android: https://github.com/superstilist/PlayerVf/releases/download/betav3/playervf.apk
+
+
