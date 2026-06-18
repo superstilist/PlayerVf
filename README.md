@@ -8,7 +8,10 @@
 
 
 
-### https://superstilist.github.io/playervf-web/
+### https://superstilist.github.io/playervf-web/ - web-app
+
+### https://superstilist.github.io/playervf/ - site
+
 
 
 
