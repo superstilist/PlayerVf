@@ -8,13 +8,13 @@
 
 
 
-### https://superstilist.github.io/playervf-web/
- - web-app
+[web-app](https://superstilist.github.io/playervf-web)
+ 
 
 
 
-### https://superstilist.github.io/playervf/
- - site
+[site](https://superstilist.github.io/playervf)
+ 
 
 
 
