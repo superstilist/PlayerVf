@@ -42,6 +42,8 @@ enum PerformanceMode { auto, quality, balanced, batterySaver, maxPerformance }
 
 enum LyricsFullscreenPosition { top, center, bottom }
 
+enum LyricsFullscreenTextAlign { left, center, right }
+
 enum LyricsFullscreenHeaderPosition { topLeft, topCenter, topRight }
 
 enum LyricsFullscreenCoverStyle { rounded, circle, shadow, glow }
@@ -57,14 +59,49 @@ enum LyricsFullscreenFontPreset {
   notoJapanese,
   notoChinese,
   display,
-  handwritten
+  handwritten,
+  robot,
+  arial,
+  helvetica,
+  georgia,
+  timesNewRoman,
+  courierNew,
+  verdana,
+  trebuchetMS,
+  impact,
+  comicSans,
+  tahoma,
+  centuryGothic,
+  lucidaConsole,
+  segoeUI,
+  calibri,
+  cambria,
+  consolas,
+  constantia,
+  corbel,
+  franklinGothic,
+  gabriola,
+  palatino,
+  garamond,
+  bookAntiqua,
+  lucidaSans,
+  arialBlack,
+  bookmanOldStyle
 }
 
-enum LyricsFullscreenHeaderStyle { compact, bigCover, coverAbove, fullCover, nameOnly }
+enum LyricsFullscreenHeaderStyle {
+  compact,
+  bigCover,
+  coverAbove,
+  fullCover,
+  nameOnly
+}
 
 enum LyricsFullscreenControlsStyle { classic, pill, minimal, glow, panel43 }
 
 enum LyricsFullscreenSpecialEffect { none, softGlow, pulse, float, particles }
+
+enum LyricsFullscreenFadeMode { none, top, bottom, both }
 
 enum LyricsFullscreenParticlePack {
   sparkles,
@@ -223,6 +260,8 @@ class SettingsModel extends ChangeNotifier {
       'lyrics_fullscreen_text_color';
   static const String _lyricsFullscreenPositionKey =
       'lyrics_fullscreen_position';
+  static const String _lyricsFullscreenTextAlignKey =
+      'lyrics_fullscreen_text_align';
   static const String _lyricsFullscreenShowCoverKey =
       'lyrics_fullscreen_show_cover';
   static const String _lyricsFullscreenShowTrackNameKey =
@@ -297,19 +336,32 @@ class SettingsModel extends ChangeNotifier {
       'lyrics_fullscreen_visual_opacity';
   static const String _lyricsFullscreenVisualItemsKey =
       'lyrics_fullscreen_visual_items';
+  static const String _lyricsFullscreenCoverScaleKey =
+      'lyrics_fullscreen_cover_scale';
+  static const String _lyricsFullscreenFadeModeKey =
+      'lyrics_fullscreen_fade_mode';
   static const String _lyricsFullscreenParticlePackKey =
       'lyrics_fullscreen_particle_pack';
   static const String _lyricsFullscreenCustomParticlePackKey =
       'lyrics_fullscreen_custom_particle_pack';
+  static const String _lyricsFullscreenWidthKey = 'lyrics_fullscreen_width';
+  static const String _lyricsFullscreenHeightKey = 'lyrics_fullscreen_height';
   static const String _coverArtDisplayModeKey = 'cover_art_display_mode';
   static const String _orbPaletteSizeKey = 'orb_palette_size';
   static const String _orbSizeKey = 'orb_size';
   static const String _orbSpeedKey = 'orb_speed';
+  static const String _fastSettingsItemsKey = 'fast_settings_items';
 
   List<String> musicSourcePaths = [];
   String youtubeMusicDownloadPath = '';
   String recordingSavePath = '';
   bool youtubeStreamCacheEnabled = true;
+  List<String> fastSettingsItems = [
+    'themeMode',
+    'backgroundMode',
+    'volume',
+    'safeEars',
+  ];
   double cardSize = 140.0;
   double cardMargins = 8.0;
   double topMargin = 60.0;
@@ -349,6 +401,8 @@ class SettingsModel extends ChangeNotifier {
   Color lyricsFullscreenTextColor = Colors.white;
   LyricsFullscreenPosition lyricsFullscreenPosition =
       LyricsFullscreenPosition.center;
+  LyricsFullscreenTextAlign lyricsFullscreenTextAlign =
+      LyricsFullscreenTextAlign.center;
   bool lyricsFullscreenShowCover = true;
   bool lyricsFullscreenShowTrackName = true;
   bool lyricsFullscreenShowControls = true;
@@ -369,6 +423,11 @@ class SettingsModel extends ChangeNotifier {
   double lyricsFullscreenHeaderScale = 1.0;
   double lyricsFullscreenLyricsScale = 1.0;
   double lyricsFullscreenControlsScale = 1.0;
+  double lyricsFullscreenWidth = 0.0;
+  double lyricsFullscreenHeight = 1.2;
+  double lyricsFullscreenCoverScale = 1.0;
+  LyricsFullscreenFadeMode lyricsFullscreenFadeMode =
+      LyricsFullscreenFadeMode.both;
   double lyricsFullscreenHeaderRotation = 0.0;
   double lyricsFullscreenLyricsRotation = 0.0;
   double lyricsFullscreenControlsRotation = 0.0;
@@ -397,6 +456,16 @@ class SettingsModel extends ChangeNotifier {
   String lyricsFullscreenCustomParticlePack = '* + .';
   CoverArtDisplayMode coverArtDisplayMode = CoverArtDisplayMode.fit;
 
+  // Spicy Lyrics Engine v2 settings
+  String lyricsGifBackgroundUrl = '';
+  bool lyricsGifBackgroundEnabled = false;
+  String lyricsCustomBackgroundColor = '';
+  double lyricsEnhancedFontScale = 1.0;
+  bool lyricsPerformanceMode = false;
+  bool lyricsWordByWordHighlight = true;
+  bool lyricsAutoScrollProgress = true;
+  int karaokeTransitionGapMs = 700;
+
   SettingsModel();
 
   Future<void> loadSettings() async {
@@ -418,8 +487,8 @@ class SettingsModel extends ChangeNotifier {
       themeMode = ThemeMode.values[themeModeIndex];
       final viewModeIndex = prefs.getInt(_viewModeKey) ?? ViewMode.card.index;
       viewMode = ViewMode.values[viewModeIndex];
-      final coverArtModeIndex =
-          prefs.getInt(_coverArtDisplayModeKey) ?? CoverArtDisplayMode.fit.index;
+      final coverArtModeIndex = prefs.getInt(_coverArtDisplayModeKey) ??
+          CoverArtDisplayMode.fit.index;
       coverArtDisplayMode = CoverArtDisplayMode.values[coverArtModeIndex];
 
       final navPosIndex =
@@ -444,6 +513,10 @@ class SettingsModel extends ChangeNotifier {
       orbPaletteSize = (prefs.getInt(_orbPaletteSizeKey) ?? 4).clamp(2, 5);
       orbSize = (prefs.getDouble(_orbSizeKey) ?? 1.5).clamp(0.5, 3.0);
       orbSpeed = (prefs.getDouble(_orbSpeedKey) ?? 1.0).clamp(0.2, 3.0);
+      final savedFastItems = prefs.getStringList(_fastSettingsItemsKey);
+      if (savedFastItems != null && savedFastItems.isNotEmpty) {
+        fastSettingsItems = savedFastItems;
+      }
 
       fontSize = prefs.getDouble(_fontSizeKey) ?? 14.0;
       borderRadius = prefs.getDouble(_borderRadiusKey) ?? 12.0;
@@ -454,10 +527,10 @@ class SettingsModel extends ChangeNotifier {
       accentColor = Color(accentColorValue);
       final backgroundModeIndex =
           prefs.getInt(_backgroundModeKey) ?? BackgroundMode.coverArt.index;
-      backgroundMode =
-          backgroundModeIndex >= 0 && backgroundModeIndex < BackgroundMode.values.length
-              ? BackgroundMode.values[backgroundModeIndex]
-              : BackgroundMode.coverArt;
+      backgroundMode = backgroundModeIndex >= 0 &&
+              backgroundModeIndex < BackgroundMode.values.length
+          ? BackgroundMode.values[backgroundModeIndex]
+          : BackgroundMode.coverArt;
       customBackgroundImage = prefs.getString(_customBackgroundImageKey) ?? '';
       seekStepSeconds = prefs.getInt(_seekStepSecondsKey) ?? 5;
       songGapMs = (prefs.getInt(songGapMsKey) ?? 0).clamp(0, 5000);
@@ -488,6 +561,9 @@ class SettingsModel extends ChangeNotifier {
       lyricsFullscreenPosition = _lyricsFullscreenPositionFromIndex(
           prefs.getInt(_lyricsFullscreenPositionKey) ??
               LyricsFullscreenPosition.center.index);
+      lyricsFullscreenTextAlign = _lyricsFullscreenTextAlignFromIndex(
+          prefs.getInt(_lyricsFullscreenTextAlignKey) ??
+              LyricsFullscreenTextAlign.center.index);
       lyricsFullscreenShowCover =
           prefs.getBool(_lyricsFullscreenShowCoverKey) ?? true;
       lyricsFullscreenShowTrackName =
@@ -498,7 +574,7 @@ class SettingsModel extends ChangeNotifier {
           prefs.getBool(_lyricsFullscreenShowProgressKey) ?? true;
       lyricsFullscreenFontScale =
           (prefs.getDouble(_lyricsFullscreenFontScaleKey) ?? 1.0)
-              .clamp(0.75, 1.35)
+              .clamp(0.5, 3.0)
               .toDouble();
       lyricsFullscreenDimBackground =
           (prefs.getDouble(_lyricsFullscreenDimBackgroundKey) ?? 0.62)
@@ -540,6 +616,17 @@ class SettingsModel extends ChangeNotifier {
           (prefs.getDouble(_lyricsFullscreenHeaderScaleKey) ?? 1.0)
               .clamp(0.55, 1.75)
               .toDouble();
+      lyricsFullscreenCoverScale =
+          (prefs.getDouble(_lyricsFullscreenCoverScaleKey) ?? 1.0)
+              .clamp(0.2, 3.0)
+              .toDouble();
+      lyricsFullscreenFadeMode = LyricsFullscreenFadeMode.values.firstWhere(
+        (e) =>
+            e.name ==
+            (prefs.getString(_lyricsFullscreenFadeModeKey) ??
+                LyricsFullscreenFadeMode.both.name),
+        orElse: () => LyricsFullscreenFadeMode.both,
+      );
       lyricsFullscreenLyricsScale =
           (prefs.getDouble(_lyricsFullscreenLyricsScaleKey) ?? 1.0)
               .clamp(0.55, 1.75)
@@ -559,6 +646,14 @@ class SettingsModel extends ChangeNotifier {
       lyricsFullscreenControlsRotation =
           (prefs.getDouble(_lyricsFullscreenControlsRotationKey) ?? 0.0)
               .clamp(-45.0, 45.0)
+              .toDouble();
+      lyricsFullscreenWidth =
+          (prefs.getDouble(_lyricsFullscreenWidthKey) ?? 0.0)
+              .clamp(-2.0, 5.0)
+              .toDouble();
+      lyricsFullscreenHeight =
+          (prefs.getDouble(_lyricsFullscreenHeightKey) ?? 1.2)
+              .clamp(0.5, 2.0)
               .toDouble();
       lyricsFullscreenFontPreset = _lyricsFullscreenFontPresetFromIndex(
           prefs.getInt(_lyricsFullscreenFontPresetKey) ??
@@ -628,6 +723,24 @@ class SettingsModel extends ChangeNotifier {
       lyricsFullscreenCustomParticlePack =
           prefs.getString(_lyricsFullscreenCustomParticlePackKey) ??
               lyricsFullscreenCustomParticlePack;
+
+      // Spicy Lyrics Engine v2 settings
+      lyricsGifBackgroundUrl = prefs.getString('lyrics_gif_bg_url') ?? '';
+      lyricsGifBackgroundEnabled =
+          prefs.getBool('lyrics_gif_bg_enabled') ?? false;
+      lyricsCustomBackgroundColor =
+          prefs.getString('lyrics_custom_bg_color') ?? '';
+      lyricsEnhancedFontScale =
+          (prefs.getDouble('lyrics_enhanced_font_scale') ?? 1.0)
+              .clamp(0.5, 3.0)
+              .toDouble();
+      lyricsPerformanceMode = prefs.getBool('lyrics_perf_mode') ?? false;
+      lyricsWordByWordHighlight =
+          prefs.getBool('lyrics_word_highlight') ?? true;
+      lyricsAutoScrollProgress =
+          prefs.getBool('lyrics_auto_scroll_progress') ?? true;
+      karaokeTransitionGapMs =
+          (prefs.getInt('karaoke_transition_gap_ms') ?? 700).clamp(0, 5000);
 
       notifyListeners();
     } catch (e) {
@@ -781,6 +894,22 @@ class SettingsModel extends ChangeNotifier {
     }
   }
 
+  Future<void> setFastSettingsItems(List<String> items) async {
+    fastSettingsItems = List<String>.from(items);
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> toggleFastSettingsItem(String item) async {
+    if (fastSettingsItems.contains(item)) {
+      fastSettingsItems.remove(item);
+    } else {
+      fastSettingsItems.add(item);
+    }
+    notifyListeners();
+    await _saveSettings();
+  }
+
   Future<void> setSeekStepSeconds(int seconds) async {
     seekStepSeconds = seconds;
     notifyListeners();
@@ -916,6 +1045,13 @@ class SettingsModel extends ChangeNotifier {
   Future<void> setLyricsFullscreenPosition(
       LyricsFullscreenPosition position) async {
     lyricsFullscreenPosition = position;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenTextAlign(
+      LyricsFullscreenTextAlign align) async {
+    lyricsFullscreenTextAlign = align;
     notifyListeners();
     await _saveSettings();
   }
@@ -1097,6 +1233,48 @@ class SettingsModel extends ChangeNotifier {
     _saveSettingsDebounced();
   }
 
+  Future<void> setLyricsFullscreenHeaderStyle(
+      LyricsFullscreenHeaderStyle style) async {
+    lyricsFullscreenHeaderStyle = style;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenControlsStyle(
+      LyricsFullscreenControlsStyle style) async {
+    lyricsFullscreenControlsStyle = style;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenFontPreset(
+      LyricsFullscreenFontPreset preset) async {
+    lyricsFullscreenFontPreset = preset;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenSpecialEffect(
+      LyricsFullscreenSpecialEffect effect) async {
+    lyricsFullscreenSpecialEffect = effect;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenFadeMode(
+      LyricsFullscreenFadeMode mode) async {
+    lyricsFullscreenFadeMode = mode;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setLyricsFullscreenParticlePack(
+      LyricsFullscreenParticlePack pack) async {
+    lyricsFullscreenParticlePack = pack;
+    notifyListeners();
+    await _saveSettings();
+  }
+
   Future<void> resetLyricsFullscreenCustomOffsets() async {
     lyricsFullscreenLyricsOffsetX = 0;
     lyricsFullscreenLyricsOffsetY = 0;
@@ -1107,6 +1285,8 @@ class SettingsModel extends ChangeNotifier {
     lyricsFullscreenHeaderScale = 1;
     lyricsFullscreenLyricsScale = 1;
     lyricsFullscreenControlsScale = 1;
+    lyricsFullscreenCoverScale = 1.0;
+    lyricsFullscreenFadeMode = LyricsFullscreenFadeMode.both;
     lyricsFullscreenHeaderRotation = 0;
     lyricsFullscreenLyricsRotation = 0;
     lyricsFullscreenControlsRotation = 0;
@@ -1122,6 +1302,7 @@ class SettingsModel extends ChangeNotifier {
   Future<void> applyLyricsFullscreenCustomization({
     required Color textColor,
     required LyricsFullscreenPosition position,
+    required LyricsFullscreenTextAlign textAlign,
     required bool showCover,
     required bool showTrackName,
     required bool showControls,
@@ -1140,6 +1321,8 @@ class SettingsModel extends ChangeNotifier {
     required double headerScale,
     required double lyricsScale,
     required double controlsScale,
+    required double coverScale,
+    required LyricsFullscreenFadeMode fadeMode,
     required double headerRotation,
     required double lyricsRotation,
     required double controlsRotation,
@@ -1161,9 +1344,12 @@ class SettingsModel extends ChangeNotifier {
     List<LyricsFullscreenVisualItem>? visualItems,
     required LyricsFullscreenParticlePack particlePack,
     required String customParticlePack,
+    double lyricsWidth = 0.0,
+    double lyricsHeight = 1.2,
   }) async {
     lyricsFullscreenTextColor = textColor;
     lyricsFullscreenPosition = position;
+    lyricsFullscreenTextAlign = textAlign;
     lyricsFullscreenShowCover = showCover;
     lyricsFullscreenShowTrackName = showTrackName;
     lyricsFullscreenShowControls = showControls;
@@ -1194,12 +1380,16 @@ class SettingsModel extends ChangeNotifier {
     lyricsFullscreenHeaderScale = headerScale.clamp(0.55, 1.75).toDouble();
     lyricsFullscreenLyricsScale = lyricsScale.clamp(0.55, 1.75).toDouble();
     lyricsFullscreenControlsScale = controlsScale.clamp(0.55, 1.75).toDouble();
+    lyricsFullscreenCoverScale = coverScale.clamp(0.2, 3.0).toDouble();
+    lyricsFullscreenFadeMode = fadeMode;
     lyricsFullscreenHeaderRotation =
         headerRotation.clamp(-45.0, 45.0).toDouble();
     lyricsFullscreenLyricsRotation =
         lyricsRotation.clamp(-45.0, 45.0).toDouble();
     lyricsFullscreenControlsRotation =
         controlsRotation.clamp(-45.0, 45.0).toDouble();
+    lyricsFullscreenWidth = lyricsWidth.clamp(-2.0, 5.0).toDouble();
+    lyricsFullscreenHeight = lyricsHeight.clamp(0.5, 2.0).toDouble();
     lyricsFullscreenFontPreset = fontPreset;
     lyricsFullscreenHeaderStyle = headerStyle;
     lyricsFullscreenControlsStyle = controlsStyle;
@@ -1282,6 +1472,55 @@ class SettingsModel extends ChangeNotifier {
     await _saveSettings();
   }
 
+  // Spicy Lyrics Engine v2 setters
+  Future<void> setLyricsGifBackgroundUrl(String url) async {
+    lyricsGifBackgroundUrl = url.trim();
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsGifBackgroundEnabled(bool enabled) async {
+    lyricsGifBackgroundEnabled = enabled;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsCustomBackgroundColor(String color) async {
+    lyricsCustomBackgroundColor = color.trim();
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsEnhancedFontScale(double scale) async {
+    lyricsEnhancedFontScale = scale.clamp(0.5, 3.0).toDouble();
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsPerformanceMode(bool enabled) async {
+    lyricsPerformanceMode = enabled;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsWordByWordHighlight(bool enabled) async {
+    lyricsWordByWordHighlight = enabled;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsAutoScrollProgress(bool enabled) async {
+    lyricsAutoScrollProgress = enabled;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setKaraokeTransitionGapMs(int gapMs) async {
+    karaokeTransitionGapMs = gapMs.clamp(0, 5000);
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
   Future<void> removeMusicPath(String path) async {
     musicSourcePaths.remove(path);
     if (youtubeMusicDownloadPath == path) {
@@ -1320,6 +1559,7 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setInt(_orbPaletteSizeKey, orbPaletteSize);
       await prefs.setDouble(_orbSizeKey, orbSize);
       await prefs.setDouble(_orbSpeedKey, orbSpeed);
+      await prefs.setStringList(_fastSettingsItemsKey, fastSettingsItems);
       await prefs.setDouble(_fontSizeKey, fontSize);
       await prefs.setDouble(_borderRadiusKey, borderRadius);
       await prefs.setDouble(
@@ -1344,8 +1584,10 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setInt(_homeRecentlyAddedCountKey, homeRecentlyAddedCount);
       await prefs.setInt(
           _lyricsFullscreenTextColorKey, lyricsFullscreenTextColor.value);
-      await prefs.setInt(_lyricsFullscreenPositionKey,
-          lyricsFullscreenPosition.index);
+      await prefs.setInt(
+          _lyricsFullscreenPositionKey, lyricsFullscreenPosition.index);
+      await prefs.setInt(
+          _lyricsFullscreenTextAlignKey, lyricsFullscreenTextAlign.index);
       await prefs.setBool(
           _lyricsFullscreenShowCoverKey, lyricsFullscreenShowCover);
       await prefs.setBool(
@@ -1383,11 +1625,17 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setDouble(
           _lyricsFullscreenControlsScaleKey, lyricsFullscreenControlsScale);
       await prefs.setDouble(
+          _lyricsFullscreenCoverScaleKey, lyricsFullscreenCoverScale);
+      await prefs.setString(
+          _lyricsFullscreenFadeModeKey, lyricsFullscreenFadeMode.name);
+      await prefs.setDouble(
           _lyricsFullscreenHeaderRotationKey, lyricsFullscreenHeaderRotation);
       await prefs.setDouble(
           _lyricsFullscreenLyricsRotationKey, lyricsFullscreenLyricsRotation);
       await prefs.setDouble(_lyricsFullscreenControlsRotationKey,
           lyricsFullscreenControlsRotation);
+      await prefs.setDouble(_lyricsFullscreenWidthKey, lyricsFullscreenWidth);
+      await prefs.setDouble(_lyricsFullscreenHeightKey, lyricsFullscreenHeight);
       await prefs.setInt(
           _lyricsFullscreenFontPresetKey, lyricsFullscreenFontPreset.index);
       await prefs.setInt(
@@ -1429,6 +1677,19 @@ class SettingsModel extends ChangeNotifier {
           _lyricsFullscreenParticlePackKey, lyricsFullscreenParticlePack.index);
       await prefs.setString(_lyricsFullscreenCustomParticlePackKey,
           lyricsFullscreenCustomParticlePack);
+
+      // Spicy Lyrics Engine v2 settings
+      await prefs.setString('lyrics_gif_bg_url', lyricsGifBackgroundUrl);
+      await prefs.setBool('lyrics_gif_bg_enabled', lyricsGifBackgroundEnabled);
+      await prefs.setString(
+          'lyrics_custom_bg_color', lyricsCustomBackgroundColor);
+      await prefs.setDouble(
+          'lyrics_enhanced_font_scale', lyricsEnhancedFontScale);
+      await prefs.setBool('lyrics_perf_mode', lyricsPerformanceMode);
+      await prefs.setBool('lyrics_word_highlight', lyricsWordByWordHighlight);
+      await prefs.setBool(
+          'lyrics_auto_scroll_progress', lyricsAutoScrollProgress);
+      await prefs.setInt('karaoke_transition_gap_ms', karaokeTransitionGapMs);
     } catch (e) {
       debugPrint('Error saving settings: $e');
     }
@@ -1458,6 +1719,12 @@ class SettingsModel extends ChangeNotifier {
     return index >= 0 && index < LyricsFullscreenPosition.values.length
         ? LyricsFullscreenPosition.values[index]
         : LyricsFullscreenPosition.center;
+  }
+
+  LyricsFullscreenTextAlign _lyricsFullscreenTextAlignFromIndex(int index) {
+    return index >= 0 && index < LyricsFullscreenTextAlign.values.length
+        ? LyricsFullscreenTextAlign.values[index]
+        : LyricsFullscreenTextAlign.center;
   }
 
   LyricsFullscreenHeaderPosition _lyricsFullscreenHeaderPositionFromIndex(

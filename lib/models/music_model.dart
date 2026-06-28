@@ -14,7 +14,9 @@ class Music {
   bool isFavorite;
   int playCount;
   DateTime? lastPlayed;
+  String? spotifyUrl;
   final DateTime dateAdded;
+  final Set<String> userEditedFields;
   late final String searchText = [
     title,
     artist,
@@ -37,8 +39,11 @@ class Music {
     this.isFavorite = false,
     this.playCount = 0,
     this.lastPlayed,
+    this.spotifyUrl,
     DateTime? dateAdded,
-  }) : dateAdded = dateAdded ?? DateTime.now();
+    Set<String>? userEditedFields,
+  })  : dateAdded = dateAdded ?? DateTime.now(),
+        userEditedFields = userEditedFields ?? {};
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -54,11 +59,17 @@ class Music {
         'isFavorite': isFavorite,
         'playCount': playCount,
         'lastPlayed': lastPlayed?.millisecondsSinceEpoch,
+        'spotifyUrl': spotifyUrl,
         'dateAdded': dateAdded.millisecondsSinceEpoch,
+        'userEditedFields': userEditedFields.toList(),
       };
 
   factory Music.fromJson(Map<String, dynamic> json) {
     final durationMs = (json['durationMs'] as num?)?.toInt();
+    final rawEdited = json['userEditedFields'];
+    final editedFields = rawEdited is List
+        ? rawEdited.map((e) => e.toString()).toSet()
+        : <String>{};
     return Music(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Unknown title',
@@ -78,10 +89,12 @@ class Music {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
               (json['lastPlayed'] as num).toInt()),
+      spotifyUrl: json['spotifyUrl']?.toString(),
       dateAdded: (json['dateAdded'] as num?) == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
               (json['dateAdded'] as num).toInt()),
+      userEditedFields: editedFields,
     );
   }
 
@@ -100,7 +113,9 @@ class Music {
       isFavorite: base.isFavorite,
       playCount: playCount,
       lastPlayed: lastPlayed,
+      spotifyUrl: base.spotifyUrl,
       dateAdded: base.dateAdded,
+      userEditedFields: base.userEditedFields,
     );
   }
 }

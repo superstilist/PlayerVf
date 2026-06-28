@@ -1,11 +1,67 @@
+import 'package:player_vf/utils/lyrics_parser.dart';
+
+class LyricWord {
+  final String text;
+  final Duration startTime;
+  final Duration endTime;
+  final bool hasComma;
+  final bool hasPeriod;
+
+  const LyricWord({
+    required this.text,
+    required this.startTime,
+    required this.endTime,
+    this.hasComma = false,
+    this.hasPeriod = false,
+  });
+
+  Duration get duration => endTime - startTime;
+
+  LyricWord copyWith({
+    String? text,
+    Duration? startTime,
+    Duration? endTime,
+    bool? hasComma,
+    bool? hasPeriod,
+  }) {
+    return LyricWord(
+      text: text ?? this.text,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      hasComma: hasComma ?? this.hasComma,
+      hasPeriod: hasPeriod ?? this.hasPeriod,
+    );
+  }
+}
+
 class LyricLine {
   final Duration? timestamp;
+  final Duration? endTime;
   final String text;
+  final List<LyricWord>? words;
 
   const LyricLine({
     required this.timestamp,
+    this.endTime,
     required this.text,
+    this.words,
   });
+
+  bool get hasWords => words != null && words!.isNotEmpty;
+
+  LyricLine copyWith({
+    Duration? timestamp,
+    Duration? endTime,
+    String? text,
+    List<LyricWord>? words,
+  }) {
+    return LyricLine(
+      timestamp: timestamp ?? this.timestamp,
+      endTime: endTime ?? this.endTime,
+      text: text ?? this.text,
+      words: words ?? this.words,
+    );
+  }
 }
 
 class LyricsDocument {
@@ -26,12 +82,6 @@ class LyricsDocument {
       .where((line) => line.isNotEmpty)
       .join('\n');
 
-  LyricsDocument shiftedBy(Duration offset) {
-    if (offset == Duration.zero || !hasTimedLines) return this;
-    final shiftedRaw = shiftRawTimestamps(rawText, offset);
-    return LyricsDocument.parse(shiftedRaw, source: source);
-  }
-
   int activeIndexAt(Duration position) {
     var active = -1;
     for (var i = 0; i < lines.length; i++) {
@@ -47,82 +97,41 @@ class LyricsDocument {
   }
 
   static LyricsDocument parse(String rawText, {required String source}) {
-    final parsedLines = <LyricLine>[];
-    final timeTagPattern = RegExp(r'\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]');
-    final metadataPattern = RegExp(r'^\[[a-zA-Z]+:.*\]$');
+    return LyricsParser.parse(rawText, source: source);
+  }
 
-    for (final rawLine in rawText.replaceAll('\r\n', '\n').split('\n')) {
-      final line = rawLine.trim();
-      if (line.isEmpty || metadataPattern.hasMatch(line)) continue;
-
-      final matches = timeTagPattern.allMatches(line).toList();
-      final text = line.replaceAll(timeTagPattern, '').trim();
-      if (matches.isEmpty) {
-        if (text.isNotEmpty) {
-          parsedLines.add(LyricLine(timestamp: null, text: text));
-        }
-        continue;
-      }
-
-      for (final match in matches) {
-        if (text.isEmpty) continue;
-        parsedLines.add(
-          LyricLine(
-            timestamp: _parseTimestamp(match),
-            text: text,
-          ),
-        );
-      }
-    }
-
-    parsedLines.sort((a, b) {
-      final left = a.timestamp;
-      final right = b.timestamp;
-      if (left == null && right == null) return 0;
-      if (left == null) return 1;
-      if (right == null) return -1;
-      return left.compareTo(right);
-    });
-
-    return LyricsDocument(
-      rawText: rawText,
-      lines: parsedLines,
-      source: source,
-    );
+  LyricsDocument shiftedBy(Duration offset) {
+    if (offset == Duration.zero || !hasTimedLines) return this;
+    final shiftedRaw = shiftRawTimestamps(rawText, offset);
+    return LyricsDocument.parse(shiftedRaw, source: source);
   }
 
   static String shiftRawTimestamps(String rawText, Duration offset) {
     final timeTagPattern = RegExp(r'\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]');
     return rawText.replaceAllMapped(timeTagPattern, (match) {
-      final shifted = _parseTimestamp(match) + offset;
+      final minutes = int.tryParse(match.group(1) ?? '') ?? 0;
+      final seconds = int.tryParse(match.group(2) ?? '') ?? 0;
+      final fraction = match.group(3) ?? '0';
+      final milliseconds = fraction.length == 1
+          ? int.parse(fraction) * 100
+          : fraction.length == 2
+              ? int.parse(fraction) * 10
+              : int.parse(fraction.padRight(3, '0').substring(0, 3));
+      final timestamp = Duration(
+        minutes: minutes,
+        seconds: seconds,
+        milliseconds: milliseconds,
+      );
+      final shifted = timestamp + offset;
       final clamped = shifted.isNegative ? Duration.zero : shifted;
-      return '[${_formatTimestamp(clamped)}]';
+      
+      final totalMilliseconds = clamped.inMilliseconds;
+      final m = totalMilliseconds ~/ Duration.millisecondsPerMinute;
+      final s = (totalMilliseconds ~/ Duration.millisecondsPerSecond) % 60;
+      final cs = (totalMilliseconds % 1000) ~/ 10;
+      return '[${m.toString().padLeft(2, '0')}:'
+          '${s.toString().padLeft(2, '0')}.'
+          '${cs.toString().padLeft(2, '0')}]';
     });
-  }
-
-  static Duration _parseTimestamp(Match match) {
-    final minutes = int.tryParse(match.group(1) ?? '') ?? 0;
-    final seconds = int.tryParse(match.group(2) ?? '') ?? 0;
-    final fraction = match.group(3) ?? '0';
-    final milliseconds = fraction.length == 1
-        ? int.parse(fraction) * 100
-        : fraction.length == 2
-            ? int.parse(fraction) * 10
-            : int.parse(fraction.padRight(3, '0').substring(0, 3));
-    return Duration(
-      minutes: minutes,
-      seconds: seconds,
-      milliseconds: milliseconds,
-    );
-  }
-
-  static String _formatTimestamp(Duration timestamp) {
-    final totalMilliseconds = timestamp.inMilliseconds;
-    final minutes = totalMilliseconds ~/ Duration.millisecondsPerMinute;
-    final seconds = (totalMilliseconds ~/ Duration.millisecondsPerSecond) % 60;
-    final centiseconds = (totalMilliseconds % 1000) ~/ 10;
-    return '${minutes.toString().padLeft(2, '0')}:'
-        '${seconds.toString().padLeft(2, '0')}.'
-        '${centiseconds.toString().padLeft(2, '0')}';
   }
 }

@@ -11,6 +11,8 @@ import '../services/musicbrainz_tag_service.dart';
 import '../services/responsive.dart';
 import '../services/safe_file_picker.dart';
 import '../services/performance_policy.dart';
+import '../services/spotify_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'cover_art_texture.dart';
 import 'glass_container.dart';
 import 'lanczos_cover_art.dart';
@@ -506,11 +508,11 @@ class MusicCard extends StatelessWidget {
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (menuContext) => Stack(
-        children: [
-          Positioned(
-            left: left,
-            top: top,
+      builder: (menuContext) => SizedBox.expand(
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: EdgeInsets.only(left: left, top: top),
             child: Material(
               color: Colors.transparent,
               child: GlassContainer(
@@ -581,7 +583,7 @@ class MusicCard extends StatelessWidget {
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -605,7 +607,7 @@ class MusicCard extends StatelessWidget {
     return InkWell(
       onTap: () {
         Navigator.pop(context);
-        WidgetsBinding.instance.addPostFrameCallback((_) => action());
+        action();
       },
       borderRadius: BorderRadius.circular(10),
       child: Padding(
@@ -627,12 +629,14 @@ class MusicCard extends StatelessWidget {
     final isFavorite = musicService.isFavorite(music.id);
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        contentPadding: EdgeInsets.zero,
-        content: GlassContainer(
-          width: 420,
-          padding: const EdgeInsets.all(22),
+      builder: (dialogContext) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Material(
+            type: MaterialType.transparency,
+            child: GlassContainer(
+          width: Responsive.wp(94).clamp(300.0, 480.0),
+          padding: EdgeInsets.all(Responsive.s(22)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -686,93 +690,106 @@ class MusicCard extends StatelessWidget {
                   'Year', music.year.trim().isEmpty ? 'Unknown' : music.year),
               _buildInfoRow('Duration', _formatTrackDuration(music.duration)),
               _buildInfoRow('File', music.filePath),
+              _SpotifyLinkRow(music: music),
               const SizedBox(height: 18),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildInfoAction(
-                    icon: Icons.play_arrow_rounded,
-                    label: 'Play',
-                    onPressed: () => _closeDialogAndRun(dialogContext, onTap),
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.open_in_full_rounded,
-                    label: 'Open',
-                    onPressed: () =>
-                        _closeDialogAndRun(dialogContext, _openTrack),
-                  ),
-                  _buildInfoAction(
-                    icon: isFavorite
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    label: isFavorite ? 'Unfavorite' : 'Favorite',
-                    onPressed: () {
-                      musicService.toggleFavorite(music.id);
-                      _showSnack(
-                        context,
-                        isFavorite
-                            ? 'Removed from favorites.'
-                            : 'Added to favorites.',
-                      );
-                    },
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.auto_fix_high_rounded,
-                    label: 'Auto Tag',
-                    onPressed: () => _closeDialogAndRun(
-                      dialogContext,
-                      () => _autoTagWithMusicBrainz(context),
-                    ),
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.manage_search_rounded,
-                    label: 'Manual Tag',
-                    onPressed: () => _closeDialogAndRun(
-                      dialogContext,
-                      () => _showManualMusicBrainzTagDialog(context),
-                    ),
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.edit_note_rounded,
-                    label: 'Edit Info',
-                    onPressed: () => _closeDialogAndRun(
-                      dialogContext,
-                      () => _showEditMetadataDialog(context),
-                    ),
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.image_rounded,
-                    label: 'Cover',
-                    onPressed: () => _closeDialogAndRun(
-                      dialogContext,
-                      () => _pickCoverArt(context),
-                    ),
-                  ),
-                  _buildInfoAction(
-                    icon: Icons.playlist_add_rounded,
-                    label: 'Playlist',
-                    onPressed: () => _closeDialogAndRun(
-                      dialogContext,
-                      () => _showAddToPlaylistDialog(context),
-                    ),
-                  ),
-                  if (onDelete != null)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
                     _buildInfoAction(
-                      icon: Icons.delete_outline_rounded,
-                      label: deleteRemovesFile ? 'Delete File' : 'Delete',
+                      icon: Icons.play_arrow_rounded,
+                      label: 'Play',
+                      onPressed: () => _closeDialogAndRun(dialogContext, onTap),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.open_in_full_rounded,
+                      label: 'Open',
+                      onPressed: () =>
+                          _closeDialogAndRun(dialogContext, _openTrack),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: isFavorite
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      label: isFavorite ? 'Unfavorite' : 'Favorite',
+                      onPressed: () {
+                        musicService.toggleFavorite(music.id);
+                        _showSnack(
+                          context,
+                          isFavorite
+                              ? 'Removed from favorites.'
+                              : 'Added to favorites.',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.auto_fix_high_rounded,
+                      label: 'Auto Tag',
                       onPressed: () => _closeDialogAndRun(
                         dialogContext,
-                        () => _confirmAndDelete(context),
+                        () => _autoTagWithMusicBrainz(context),
                       ),
                     ),
-                ],
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.manage_search_rounded,
+                      label: 'Manual Tag',
+                      onPressed: () => _closeDialogAndRun(
+                        dialogContext,
+                        () => _showManualMusicBrainzTagDialog(context),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.edit_note_rounded,
+                      label: 'Edit Info',
+                      onPressed: () => _closeDialogAndRun(
+                        dialogContext,
+                        () => _showEditMetadataDialog(context),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.image_rounded,
+                      label: 'Cover',
+                      onPressed: () => _closeDialogAndRun(
+                        dialogContext,
+                        () => _pickCoverArt(context),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoAction(
+                      icon: Icons.playlist_add_rounded,
+                      label: 'Playlist',
+                      onPressed: () => _closeDialogAndRun(
+                        dialogContext,
+                        () => _showAddToPlaylistDialog(context),
+                      ),
+                    ),
+                    if (onDelete != null) ...[
+                      const SizedBox(width: 8),
+                      _buildInfoAction(
+                        icon: Icons.delete_outline_rounded,
+                        label: deleteRemovesFile ? 'Delete File' : 'Delete',
+                        onPressed: () => _closeDialogAndRun(
+                          dialogContext,
+                          () => _confirmAndDelete(context),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildInfoRow(String label, String value) {
@@ -904,6 +921,7 @@ class MusicCard extends StatelessWidget {
           required album,
           required genre,
           required year,
+          String? coverPath,
         }) async {
           await musicService.updateMusicMetadata(
             music.id,
@@ -913,6 +931,9 @@ class MusicCard extends StatelessWidget {
             genre,
             year: year,
           );
+          if (coverPath != null && coverPath != music.coverPath) {
+            await musicService.updateMusicCover(music.id, coverPath);
+          }
         },
       ),
     );
@@ -1022,10 +1043,12 @@ class MusicCard extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        contentPadding: EdgeInsets.zero,
-        content: GlassContainer(
+      builder: (context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Material(
+            type: MaterialType.transparency,
+            child: GlassContainer(
           width: 300,
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -1050,7 +1073,9 @@ class MusicCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
@@ -1072,6 +1097,7 @@ typedef _SaveMetadata = Future<void> Function({
   required String album,
   required String genre,
   required String year,
+  String? coverPath,
 });
 
 class _EditMetadataDialog extends StatefulWidget {
@@ -1094,6 +1120,7 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
   late final TextEditingController _genreController;
   late final TextEditingController _yearController;
   bool _isSaving = false;
+  String? _selectedCoverPath;
 
   @override
   void initState() {
@@ -1103,6 +1130,7 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
     _albumController = TextEditingController(text: widget.music.album);
     _genreController = TextEditingController(text: widget.music.genre);
     _yearController = TextEditingController(text: widget.music.year);
+    _selectedCoverPath = widget.music.coverPath;
   }
 
   @override
@@ -1118,14 +1146,21 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
-    await widget.onSave(
-      title: _cleanMetadataText(_titleController.text, 'Unknown title'),
-      artist: _cleanMetadataText(_artistController.text, 'Unknown Artist'),
-      album: _cleanMetadataText(_albumController.text, 'Unknown Album'),
-      genre: _cleanMetadataText(_genreController.text, 'Unknown'),
-      year: _cleanYear(_yearController.text),
-    );
-    if (mounted) Navigator.pop(context);
+    try {
+      await widget.onSave(
+        title: _cleanMetadataText(_titleController.text, 'Unknown title'),
+        artist: _cleanMetadataText(_artistController.text, 'Unknown Artist'),
+        album: _cleanMetadataText(_albumController.text, 'Unknown Album'),
+        genre: _cleanMetadataText(_genreController.text, 'Unknown'),
+        year: _cleanYear(_yearController.text),
+        coverPath: _selectedCoverPath,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   static String _cleanMetadataText(String value, String fallback) {
@@ -1147,7 +1182,7 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
         width: 320,
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 560),
+          constraints: const BoxConstraints(maxHeight: 620),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1156,6 +1191,8 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
                   'Edit Info',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 16),
+                _buildCoverArtSection(context),
                 const SizedBox(height: 16),
                 _GlassTextField(label: 'Title', controller: _titleController),
                 const SizedBox(height: 12),
@@ -1197,6 +1234,62 @@ class _EditMetadataDialogState extends State<_EditMetadataDialog> {
         ),
       ),
     );
+  }
+
+  Widget _buildCoverArtSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final coverPath = _selectedCoverPath ?? widget.music.coverPath;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 100,
+            height: 100,
+            child: coverPath.isNotEmpty
+                ? (coverPath.startsWith('http')
+                    ? Image.network(coverPath, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _coverFallback(theme))
+                    : CoverArtTexture(coverArtPath: coverPath, width: 100, height: 100))
+                : _coverFallback(theme),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton.icon(
+              onPressed: () => _pickNewCover(context),
+              icon: const Icon(Icons.image_rounded, size: 18),
+              label: const Text('Change Cover'),
+            ),
+            if (_selectedCoverPath != null && _selectedCoverPath != widget.music.coverPath)
+              TextButton.icon(
+                onPressed: () => setState(() => _selectedCoverPath = null),
+                icon: const Icon(Icons.restore_rounded, size: 18),
+                label: const Text('Reset'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _coverFallback(ThemeData theme) {
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Icon(Icons.music_note_rounded, size: 40, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+    );
+  }
+
+  Future<void> _pickNewCover(BuildContext context) async {
+    final path = await pickFilePathSafely(
+      context,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (path != null && path.trim().isNotEmpty) {
+      setState(() => _selectedCoverPath = path.trim());
+    }
   }
 }
 
@@ -1251,41 +1344,45 @@ class _ManualMusicBrainzTagDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Colors.transparent,
-      contentPadding: EdgeInsets.zero,
-      content: GlassContainer(
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Material(
+          type: MaterialType.transparency,
+          child: GlassContainer(
         width: 340,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Manual MusicBrainz Tag',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _GlassTextField(label: 'Title', controller: _titleController),
-            const SizedBox(height: 12),
-            _GlassTextField(label: 'Artist', controller: _artistController),
-            const SizedBox(height: 12),
-            _GlassTextField(label: 'Album', controller: _albumController),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                const Text(
+                  'Manual MusicBrainz Tag',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                  child: const Text('Search'),
+                const SizedBox(height: 16),
+                _GlassTextField(label: 'Title', controller: _titleController),
+                const SizedBox(height: 12),
+                _GlassTextField(label: 'Artist', controller: _artistController),
+                const SizedBox(height: 12),
+                _GlassTextField(label: 'Album', controller: _albumController),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: _submit,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                      child: const Text('Search'),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1547,5 +1644,198 @@ class _MusicBrainzResultsDialogState extends State<_MusicBrainzResultsDialog> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds.remainder(60);
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class _SpotifyLinkRow extends StatelessWidget {
+  final Music music;
+  const _SpotifyLinkRow({required this.music});
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<MusicService, Music?>(
+      selector: (_, svc) => svc.musicList.where((m) => m.id == music.id).firstOrNull,
+      builder: (context, freshMusic, _) {
+        final m = freshMusic ?? music;
+        if (m.spotifyUrl != null && m.spotifyUrl!.isNotEmpty) {
+          return _SpotifyLinkFound(music: m);
+        }
+        return _SpotifyLinkSearch(music: m);
+      },
+    );
+  }
+}
+
+class _SpotifyLinkFound extends StatelessWidget {
+  final Music music;
+  const _SpotifyLinkFound({required this.music});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 72,
+            child: Text('Spotify', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () async {
+                final url = Uri.parse(music.spotifyUrl!);
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Text(
+                music.spotifyUrl!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: Colors.lightBlueAccent,
+                  decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit, size: 16, color: Colors.white54),
+            onPressed: () => _showEditLinkDialog(context, music),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditLinkDialog(BuildContext context, Music music) async {
+    final TextEditingController controller = TextEditingController(text: music.spotifyUrl ?? '');
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Spotify Link'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'https://open.spotify.com/track/...',
+              labelText: 'Spotify URL',
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save')),
+          ],
+        );
+      },
+    );
+    if (newUrl != null && newUrl.isNotEmpty && context.mounted) {
+      final musicService = Provider.of<MusicService>(context, listen: false);
+      await musicService.updateMusicMetadata(
+        music.id, music.title, music.artist, music.album, music.genre,
+        year: music.year, spotifyUrl: newUrl,
+      );
+    }
+  }
+}
+
+class _SpotifyLinkSearch extends StatefulWidget {
+  final Music music;
+  const _SpotifyLinkSearch({required this.music});
+
+  @override
+  State<_SpotifyLinkSearch> createState() => _SpotifyLinkSearchState();
+}
+
+class _SpotifyLinkSearchState extends State<_SpotifyLinkSearch> {
+  bool _isLoading = false;
+
+  Future<void> _fetchSpotifyLink() async {
+    setState(() => _isLoading = true);
+    try {
+      final spotifyService = Provider.of<SpotifyService>(context, listen: false);
+      final url = await spotifyService.getTrackSpotifyUrl(widget.music);
+      if (url != null && mounted) {
+        final musicService = Provider.of<MusicService>(context, listen: false);
+        await musicService.updateMusicMetadata(
+          widget.music.id, widget.music.title, widget.music.artist,
+          widget.music.album, widget.music.genre,
+          year: widget.music.year, spotifyUrl: url,
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Song not found on Spotify. Tap edit to add manually.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showEditLinkDialog() async {
+    final TextEditingController controller = TextEditingController(text: widget.music.spotifyUrl ?? '');
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Spotify Link'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'https://open.spotify.com/track/...',
+              labelText: 'Spotify URL',
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save')),
+          ],
+        );
+      },
+    );
+    if (newUrl != null && newUrl.isNotEmpty && mounted) {
+      final musicService = Provider.of<MusicService>(context, listen: false);
+      await musicService.updateMusicMetadata(
+        widget.music.id, widget.music.title, widget.music.artist,
+        widget.music.album, widget.music.genre,
+        year: widget.music.year, spotifyUrl: newUrl,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 72,
+            child: Text('Spotify', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const SizedBox(height: 14, width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : GestureDetector(
+                    onTap: _fetchSpotifyLink,
+                    child: const Text('Search on Spotify',
+                      style: TextStyle(fontSize: 13, color: Colors.amberAccent,
+                        fontWeight: FontWeight.bold)),
+                  ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit, size: 16, color: Colors.white54),
+            onPressed: _showEditLinkDialog,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
   }
 }

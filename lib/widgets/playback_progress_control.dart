@@ -99,9 +99,15 @@ class _PlaybackProgressControlState extends State<PlaybackProgressControl> {
                         : boundedPosition);
             final reduceMotion =
                 MediaQuery.maybeOf(context)?.disableAnimations == true;
+            final progressString = '${(targetProgress * 100).round()}%';
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            return ExcludeSemantics(
+              excluding: true,
+              child: Semantics(
+                label: 'Playback progress',
+                value: progressString,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 2.w),
@@ -155,6 +161,8 @@ class _PlaybackProgressControlState extends State<PlaybackProgressControl> {
                   ),
                 ),
               ],
+            ),
+            ),
             );
           },
         );
@@ -259,11 +267,8 @@ class _ProgressScrubberState extends State<_ProgressScrubber> {
               .toDouble();
         }
 
-        return Semantics(
-          label: 'Playback progress',
-          value: '${(widget.progress * 100).round()}%',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
             onTapDown: widget.enabled
                 ? (details) {
                     final value = valueFromDx(details.localPosition.dx);
@@ -305,8 +310,7 @@ class _ProgressScrubberState extends State<_ProgressScrubber> {
                 size: Size.infinite,
               ),
             ),
-          ),
-        );
+          );
       },
     );
   }

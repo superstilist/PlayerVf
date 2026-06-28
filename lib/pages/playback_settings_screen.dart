@@ -23,11 +23,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Playback',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),

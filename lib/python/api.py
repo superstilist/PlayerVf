@@ -1312,6 +1312,34 @@ def search_youtube_music(query: str, filter_name: str = "songs", limit: int = 20
     return json.dumps([_search_item_to_dict(item) for item in items], ensure_ascii=True)
 
 
+def _save_video_cover(item: SearchItem, stem: Path) -> Optional[Path]:
+    """Download and save cover art for a video download as a sidecar JPEG."""
+    try:
+        raw = item.raw or {}
+        cover = download_best_cover(raw)
+        if not cover:
+            return None
+        data, mime = cover
+        cover_path = stem.with_suffix(".cover.jpg")
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(data))
+        w, h = img.size
+        if w != h:
+            side = min(w, h)
+            left = (w - side) // 2
+            top = (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+        if img.size[0] > 640:
+            img = img.resize((640, 640), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=92)
+        cover_path.write_bytes(buf.getvalue())
+        return cover_path
+    except Exception:
+        return None
+
+
 def _download_youtube_video_file(
     item: SearchItem,
     download_dir: Path,
@@ -1503,7 +1531,7 @@ def _download_youtube_video_file(
 
     manifest = {
         "type": "playervf.youtubeVideoSet",
-        "version": 1,
+        "version": 2,
         "videoId": video_id,
         "title": item.title,
         "artist": item.artist,
@@ -1522,6 +1550,11 @@ def _download_youtube_video_file(
         "subtitleFailures": subtitle_failures,
         "createdAt": datetime.now().isoformat(timespec="seconds"),
     }
+
+    cover_path = _save_video_cover(item, stem)
+    if cover_path:
+        manifest["coverPath"] = str(cover_path)
+        all_files.append(cover_path)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
     all_files.append(manifest_path)
     return all_files

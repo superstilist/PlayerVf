@@ -9,6 +9,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:smtc_windows/smtc_windows.dart' as smtc;
 
 import '../models/music_model.dart';
+import 'headphone_gesture_recognizer.dart';
 
 late PlayerAudioHandler playerAudioHandler;
 
@@ -43,8 +44,9 @@ class PlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   Timer? _windowsTimelineTimer;
   bool _windowsSmtcDisabled = false;
   bool _windowsMediaControlsActive = true;
-  DateTime _lastPlayPauseToggle = DateTime.fromMillisecondsSinceEpoch(0);
   bool _completionReported = false;
+  final HeadphoneGestureRecognizer _gestureRecognizer =
+      HeadphoneGestureRecognizer();
 
   Future<void> Function()? onTogglePlayPauseCommand;
   Future<void> Function()? onPlayCommand;
@@ -77,6 +79,8 @@ class PlayerAudioHandler extends BaseAudioHandler with SeekHandler {
         debugPrint('Could not force-enable Android media buttons: $e');
       }
     }
+
+    _gestureRecognizer.onGesture = _handleGesture;
 
     playbackState.add(playbackState.value.copyWith(
       controls: _controlsFor(false),
@@ -350,11 +354,19 @@ class PlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     await pauseFromService();
   }
 
+  DateTime? _lastMediaClickTime;
+
   @override
   Future<void> click([MediaButton button = MediaButton.media]) async {
     switch (button) {
       case MediaButton.media:
-        await _togglePlayPauseNow();
+        final now = DateTime.now();
+        final last = _lastMediaClickTime;
+        _lastMediaClickTime = now;
+        if (last != null && now.difference(last).inMilliseconds < 80) {
+          return;
+        }
+        _gestureRecognizer.onButtonPress();
         break;
       case MediaButton.next:
         await skipToNext();
@@ -365,12 +377,23 @@ class PlayerAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
-  Future<void> _togglePlayPauseNow() async {
-    final now = DateTime.now();
-    if (now.difference(_lastPlayPauseToggle).inMilliseconds < 450) {
-      return;
+  void _handleGesture(HeadphoneGesture gesture) {
+    switch (gesture) {
+      case HeadphoneGesture.singlePress:
+        unawaited(_togglePlayPauseNow());
+        break;
+      case HeadphoneGesture.doublePress:
+        unawaited(skipToNext());
+        break;
+      case HeadphoneGesture.triplePress:
+        unawaited(skipToPrevious());
+        break;
+      case HeadphoneGesture.longPress:
+        break;
     }
-    _lastPlayPauseToggle = now;
+  }
+
+  Future<void> _togglePlayPauseNow() async {
     final toggleCommand = onTogglePlayPauseCommand;
     if (toggleCommand != null) {
       await toggleCommand();

@@ -810,9 +810,13 @@ Color _glassSurfaceColor(ThemeData theme, double intensity) {
 void showAudioEffectsMenu(BuildContext context) {
   showDialog(
     context: context,
-    builder: (context) => const Material(
-      color: Colors.transparent,
-      child: AudioEffectsMenu(),
+    builder: (dialogContext) => SizedBox(
+      width: MediaQuery.sizeOf(context).width * 0.96,
+      height: MediaQuery.sizeOf(context).height * 0.84,
+      child: const Material(
+        color: Colors.transparent,
+        child: AudioEffectsMenu(),
+      ),
     ),
   );
 }

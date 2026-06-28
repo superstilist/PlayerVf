@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show PlatformDispatcher, PointerDeviceKind;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform, kIsWeb;
@@ -27,14 +28,19 @@ import 'models/settings_model.dart';
 import 'models/music_model.dart';
 import 'services/responsive.dart';
 import 'widgets/lanczos_cover_art.dart';
+import 'widgets/cover_art_texture.dart';
 import 'widgets/blurred_cover_background.dart';
 import 'widgets/glass_container.dart';
-import 'widgets/settings_drawer.dart';
+import 'pages/artist_page.dart';
+import 'pages/album_detail_page.dart';
+import 'pages/settings_page.dart';
+import 'widgets/fast_settings_menu.dart';
 import 'widgets/particle_system.dart';
 import 'widgets/orb_system.dart';
 import 'widgets/listen_together_sheet.dart';
 import 'services/debug_service.dart';
 import 'services/cover_color_service.dart';
+import 'services/spotify_service.dart';
 
 DateTime _lastKeyboardAssertionLog = DateTime.fromMillisecondsSinceEpoch(0);
 const List<String> _textFontFallback = [
@@ -69,6 +75,9 @@ void main() async {
   final settings = SettingsModel();
   await settings.loadSettings();
 
+  final spotifyService = SpotifyService();
+  await spotifyService.init();
+
   runApp(
     MultiProvider(
       providers: [
@@ -76,6 +85,7 @@ void main() async {
         ChangeNotifierProvider<MusicService>(create: (_) => MusicService()),
         ChangeNotifierProvider<ListenTogetherService>(create: (_) => ListenTogetherService()),
         ChangeNotifierProvider<OrbController>.value(value: OrbController.instance),
+        ChangeNotifierProvider<SpotifyService>.value(value: spotifyService),
       ],
       child: const MyApp(),
     ),
@@ -217,14 +227,14 @@ class MyApp extends StatelessWidget {
     final scheme = brightness == Brightness.light
         ? generatedScheme.copyWith(
             surface: surface,
-            onSurface: const Color(0xFF111827),
-            surfaceContainerLowest: Colors.white,
-            surfaceContainerLow: const Color(0xFFF9FAFB),
-            surfaceContainer: const Color(0xFFF3F4F6),
-            surfaceContainerHigh: const Color(0xFFEFF2F6),
-            surfaceContainerHighest: const Color(0xFFE7ECF2),
-            outline: const Color(0xFF8A95A3),
-            outlineVariant: const Color(0xFFC7CED8),
+            onSurface: const Color(0xFF1A1D23),
+            surfaceContainerLowest: const Color(0xFFF0F1F4),
+            surfaceContainerLow: const Color(0xFFE8EAEE),
+            surfaceContainer: const Color(0xFFDEE1E6),
+            surfaceContainerHigh: const Color(0xFFD4D8DE),
+            surfaceContainerHighest: const Color(0xFFC8CDD5),
+            outline: const Color(0xFF7A8594),
+            outlineVariant: const Color(0xFFB8BFC9),
           )
         : generatedScheme.copyWith(surface: surface);
     final radius = BorderRadius.circular(20);
@@ -462,27 +472,27 @@ class MyApp extends StatelessWidget {
       case ThemePreset.material:
         return brightness == Brightness.dark
             ? const Color(0xFF1B1C1E)
-            : const Color(0xFFF5F7FA);
+            : const Color(0xFFE8EAEE);
       case ThemePreset.graphite:
         return brightness == Brightness.dark
             ? const Color(0xFF151719)
-            : const Color(0xFFF3F5F7);
+            : const Color(0xFFE4E6EA);
       case ThemePreset.classic:
         return brightness == Brightness.dark
             ? const Color(0xFF151616)
-            : const Color(0xFFF7F8FA);
+            : const Color(0xFFEAECEF);
       case ThemePreset.azure:
         return brightness == Brightness.dark
             ? const Color(0xFF10171C)
-            : const Color(0xFFF2F8FC);
+            : const Color(0xFFE5EAF0);
       case ThemePreset.sunset:
         return brightness == Brightness.dark
             ? const Color(0xFF1C1715)
-            : const Color(0xFFFAF7F5);
+            : const Color(0xFFEDE9E6);
       default:
         return brightness == Brightness.dark
             ? const Color(0xFF111315)
-            : const Color(0xFFF6F7F9);
+            : const Color(0xFFE6E8EC);
     }
   }
 }
@@ -911,7 +921,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
            child: Scaffold(
                  key: _scaffoldKey,
                  backgroundColor: Colors.transparent,
-                 endDrawer: const SettingsDrawer(),
                  body: Stack(
                    children: [
                      _buildMicaBackground(currentMusic, theme),
@@ -955,25 +964,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                               },
                             ),
                           ),
-                     _PlayerContentOverlay(
-                       mainLayout: mainLayout,
-                       appBar: _buildTopAppBar(theme),
-                       topMargin: _effectiveTopMargin(topMargin),
-                     ),
-                     if (currentMusic != null)
-                       _MiniPlayerOverlay(
-                         leftOffset: leftOffset,
-                         rightOffset: rightOffset,
-                         bottomOffset: navPosition == NavPosition.bottom
-                             ? (isPhone
-                                 ? _mobileBottomNavMiniPlayerOffset(safeBottom)
-                                 : 110.h)
-                             : 24.h,
-                         child: _buildMiniPlayer(currentMusic),
-                       ),
-                   ],
-                 ),
-               ),
+                      _PlayerContentOverlay(
+                        mainLayout: mainLayout,
+                        appBar: _buildTopAppBar(theme),
+                        topMargin: _effectiveTopMargin(topMargin),
+                      ),
+                      if (currentMusic != null)
+                        _MiniPlayerOverlay(
+                          leftOffset: leftOffset,
+                          rightOffset: rightOffset,
+                          bottomOffset: navPosition == NavPosition.bottom
+                              ? (isPhone
+                                  ? _mobileBottomNavMiniPlayerOffset(safeBottom)
+                                  : 110.h)
+                              : 24.h,
+                          child: _buildMiniPlayer(currentMusic),
+                        ),
+                    ],
+                  ),
+                ),
           ),
         ),
       );
@@ -1123,7 +1132,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               ),
               IconButton(
                 icon: const Icon(Icons.settings_rounded),
-                onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+                onPressed: () => showFastSettingsMenu(context),
               ),
             ],
           ),
@@ -1222,17 +1231,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   static const Duration _pageTransitionDuration = Duration(milliseconds: 350);
 
   Widget _buildMainContentArea(ThemeData theme) {
+    if (_isSearchOpen) {
+      return Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: Responsive.isTablet ? 20 : 14.w),
+            child: _buildSearchBar(theme),
+          ),
+          const SizedBox(height: 8),
+          Expanded(child: _buildSearchResults(theme)),
+        ],
+      );
+    }
     return Column(
       children: [
-        AnimatedContainer(
-          duration: _pageTransitionDuration,
-          curve: Curves.easeOutQuart,
-          height: _isSearchOpen ? 64.h : 0,
-          padding:
-              EdgeInsets.symmetric(horizontal: Responsive.isTablet ? 20 : 14.w),
-          alignment: Alignment.center,
-          child: _isSearchOpen ? _buildSearchBar(theme) : null,
-        ),
         Expanded(
           child: RepaintBoundary(
             child: PageView(
@@ -1254,6 +1267,160 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     );
   }
 
+  Widget _buildSearchResults(ThemeData theme) {
+    final musicService = context.read<MusicService>();
+    final query = _searchQuery;
+    final results = query.isEmpty
+        ? <Music>[]
+        : musicService.musicList
+            .where((m) => m.searchText.contains(query))
+            .toList();
+    if (query.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_rounded,
+                size: 48, color: theme.colorScheme.onSurface.withOpacity(0.15)),
+            const SizedBox(height: 8),
+            Text(
+              'Type to search your library',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (results.isEmpty) {
+      return Center(
+        child: Text(
+          'No results found',
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.4),
+            fontSize: 14,
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: Responsive.isTablet ? 20 : 14.w),
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final music = results[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: music.coverPath.isNotEmpty
+                  ? CoverArtTexture(
+                      coverArtPath: music.coverPath,
+                      width: 44,
+                      height: 44,
+                    )
+                  : Container(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child: Icon(Icons.music_note_rounded,
+                          color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                    ),
+            ),
+          ),
+          title: Text(
+            music.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          subtitle: RichText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+              children: [
+                if (music.artist.isNotEmpty)
+                  TextSpan(
+                    text: music.artist,
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () {
+                        Navigator.of(context).push(
+                          PageRouteBuilder(
+                            transitionDuration: const Duration(milliseconds: 320),
+                            reverseTransitionDuration: const Duration(milliseconds: 280),
+                            pageBuilder: (_, __, ___) => ArtistPage(
+                              artistName: music.artist,
+                              localCoverPath: music.coverPath,
+                            ),
+                            transitionsBuilder: (_, anim, __, child) {
+                              return FadeTransition(
+                                opacity: CurvedAnimation(
+                                  parent: anim,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                                child: child,
+                              );
+                            },
+                          ),
+                        );
+                      },
+                  ),
+                if (music.album.isNotEmpty) ...[
+                  const TextSpan(text: ' · '),
+                  TextSpan(
+                    text: music.album,
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AlbumDetailPage(
+                                albumName: music.album),
+                          ),
+                        );
+                      },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.play_circle_outline_rounded),
+            onPressed: () {
+              musicService.playMusicFromQueue(musicService.musicList, music);
+              setState(() {
+                _isSearchOpen = false;
+                _searchQuery = '';
+                _searchController.clear();
+              });
+            },
+          ),
+          onTap: () {
+            musicService.playMusicFromQueue(musicService.musicList, music);
+            setState(() {
+              _isSearchOpen = false;
+              _searchQuery = '';
+              _searchController.clear();
+            });
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildSearchBar(ThemeData theme) {
     return SizedBox(
       height: 48.h.clamp(44.0, 52.0),
@@ -1261,22 +1428,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         borderRadius: BorderRadius.circular(8.s),
         color: null,
         blur: 0,
-        child: Center(
-          child: TextField(
-            controller: _searchController,
-            textAlignVertical: TextAlignVertical.center,
-            decoration: const InputDecoration(
-              hintText: 'Search your library...',
-              border: InputBorder.none,
-              isDense: true,
-              prefixIcon: Icon(Icons.search_rounded),
-              contentPadding: EdgeInsets.symmetric(vertical: 12),
-            ),
-            onChanged: _updateSearchQuery,
+        child: TextField(
+          controller: _searchController,
+          textAlignVertical: TextAlignVertical.center,
+          onChanged: (q) {
+            _searchDebounce?.cancel();
+            final trimmed = q.trim().toLowerCase();
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              setState(() => _searchQuery = trimmed);
+            });
+          },
+          decoration: InputDecoration(
+            hintText: 'Search library...',
+            border: InputBorder.none,
+            isDense: true,
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  )
+                : null,
+            contentPadding: EdgeInsets.symmetric(vertical: 12),
           ),
         ),
       ),
     );
+  }
+
+  static bool _isNetworkCover(String path) {
+    return path.startsWith('http://') || path.startsWith('https://');
   }
 
   Widget _buildMiniPlayer(Music? currentMusic) {
@@ -1315,13 +1499,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                           tag: coverTag,
                           child: Material(
                             color: Colors.transparent,
-                            child: LanczosCoverArt(
-                              coverArtPath: currentMusic.coverPath,
-                              width: Responsive.listArtSize,
-                              height: Responsive.listArtSize,
-                              borderRadius: BorderRadius.circular(
-                                  Responsive.listArtRadius),
-                            ),
+                            child: _isNetworkCover(currentMusic.coverPath)
+                                ? CoverArtTexture(
+                                    coverArtPath: currentMusic.coverPath,
+                                    width: Responsive.listArtSize,
+                                    height: Responsive.listArtSize,
+                                    borderRadius: BorderRadius.circular(
+                                        Responsive.listArtRadius),
+                                  )
+                                : LanczosCoverArt(
+                                    coverArtPath: currentMusic.coverPath,
+                                    width: Responsive.listArtSize,
+                                    height: Responsive.listArtSize,
+                                    borderRadius: BorderRadius.circular(
+                                        Responsive.listArtRadius),
+                                  ),
                           ),
                         ),
                       ),

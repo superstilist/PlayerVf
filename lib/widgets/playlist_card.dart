@@ -209,20 +209,23 @@ class PlaylistCard extends StatelessWidget {
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => Stack(
-        children: [
-          Positioned(
-            left: position.dx,
-            top: position.dy,
-            child: Material(
-              color: Colors.transparent,
-              child: GlassContainer(
-                width: 180,
-                padding: const EdgeInsets.all(8),
-                borderRadius: BorderRadius.circular(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+      builder: (context) => SizedBox(
+        width: 180,
+        height: 200,
+        child: Stack(
+          children: [
+            Positioned(
+              left: (position.dx - 90).clamp(8.0, MediaQuery.sizeOf(context).width - 188),
+              top: position.dy.clamp(8.0, MediaQuery.sizeOf(context).height - 180),
+              child: Material(
+                color: Colors.transparent,
+                child: GlassContainer(
+                  width: 180,
+                  padding: const EdgeInsets.all(8),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     _buildMenuItem(context, 'Play Playlist',
                         Icons.play_arrow_rounded, Colors.teal, () {
                       Provider.of<MusicService>(context, listen: false)
@@ -243,6 +246,7 @@ class PlaylistCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

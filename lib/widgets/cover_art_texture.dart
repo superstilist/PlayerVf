@@ -34,51 +34,67 @@ class CoverArtTexture extends StatelessWidget {
         ? policy.coverCacheScale
         : cacheScale!.clamp(0.35, policy.coverCacheScale);
 
+    final resolvedWidth = _sanitizeDimension(width, 200);
+    final resolvedHeight = _sanitizeDimension(height, 200);
+    final radius = borderRadius ?? BorderRadius.zero;
+
+    final Widget child;
     if (coverArtPath.isNotEmpty) {
       if (_isBrowserImage(coverArtPath)) {
-        return ClipRRect(
-          borderRadius: borderRadius ?? BorderRadius.zero,
-          child: _NetworkCoverArt(
-            url: coverArtPath,
-            width: width,
-            height: height,
-            fallback: _buildDefaultCover(),
-            filterQuality: resolvedFilterQuality,
-            cacheScale: resolvedCacheScale,
+        child = _NetworkCoverArt(
+          url: coverArtPath,
+          width: resolvedWidth,
+          height: resolvedHeight,
+          fallback: _buildDefaultCover(
+            width: resolvedWidth,
+            height: resolvedHeight,
+            borderRadius: radius,
           ),
+          filterQuality: resolvedFilterQuality,
+          cacheScale: resolvedCacheScale,
+        );
+      } else if (kIsWeb) {
+        child = _buildDefaultCover(
+          width: resolvedWidth,
+          height: resolvedHeight,
+          borderRadius: radius,
+        );
+      } else {
+        child = _buildCoverArtImage(
+          context,
+          width: resolvedWidth,
+          height: resolvedHeight,
+          path: coverArtPath,
+          filterQuality: resolvedFilterQuality,
+          cacheScale: resolvedCacheScale,
         );
       }
-
-      if (kIsWeb) {
-        return _buildDefaultCover();
-      }
-
-      return RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: borderRadius ?? BorderRadius.zero,
-          child: _buildCoverArtImage(
-            context,
-            width: width,
-            height: height,
-            path: coverArtPath,
-            filterQuality: resolvedFilterQuality,
-            cacheScale: resolvedCacheScale,
-          ),
-        ),
+    } else {
+      child = _buildDefaultCover(
+        width: resolvedWidth,
+        height: resolvedHeight,
+        borderRadius: radius,
       );
     }
 
-    return _buildDefaultCover();
+    return SizedBox(
+      width: resolvedWidth,
+      height: resolvedHeight,
+      child: ClipRRect(
+        borderRadius: radius,
+        child: child,
+      ),
+    );
   }
 
   Widget _buildCoverArtImage(
-    BuildContext context,
-    {required double width,
-    required double height,
-    required String path,
-    required FilterQuality filterQuality,
-    required double cacheScale,
-    }) {
+      BuildContext context, {
+        required double width,
+        required double height,
+        required String path,
+        required FilterQuality filterQuality,
+        required double cacheScale,
+      }) {
     switch (coverArtDisplayMode) {
       case CoverArtDisplayMode.fit:
         return Image.file(
@@ -92,49 +108,69 @@ class CoverArtTexture extends StatelessWidget {
           filterQuality: filterQuality,
           isAntiAlias: true,
           errorBuilder: (context, error, stackTrace) {
-            return _buildDefaultCover();
+            return _buildDefaultCover(
+              width: width,
+              height: height,
+              borderRadius: borderRadius ?? BorderRadius.zero,
+            );
           },
         );
+
       case CoverArtDisplayMode.crop:
         return Stack(
+          fit: StackFit.expand,
           children: [
             Image.file(
               io.File(path),
-              width: double.infinity,
-              height: double.infinity,
               cacheWidth: _cacheExtent(width, cacheScale),
               cacheHeight: _cacheExtent(height, cacheScale),
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: filterQuality,
               isAntiAlias: true,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildDefaultCover(
+                  width: width,
+                  height: height,
+                  borderRadius: borderRadius ?? BorderRadius.zero,
+                );
+              },
             ),
             Container(
               color: Colors.black.withOpacity(0.3),
             ),
           ],
         );
+
       case CoverArtDisplayMode.square:
+        final side = width < height ? width : height;
+
         return Stack(
+          fit: StackFit.expand,
           children: [
             Image.file(
               io.File(path),
-              width: double.infinity,
-              height: double.infinity,
               cacheWidth: _cacheExtent(width, cacheScale),
               cacheHeight: _cacheExtent(height, cacheScale),
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: filterQuality,
               isAntiAlias: true,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildDefaultCover(
+                  width: width,
+                  height: height,
+                  borderRadius: borderRadius ?? BorderRadius.zero,
+                );
+              },
             ),
             Container(
               color: Colors.black.withOpacity(0.3),
             ),
             Center(
               child: Container(
-                width: width.clamp(0, height),
-                height: height.clamp(0, width),
+                width: side,
+                height: side,
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: Colors.white.withOpacity(0.3),
@@ -145,6 +181,7 @@ class CoverArtTexture extends StatelessWidget {
             ),
           ],
         );
+
       case CoverArtDisplayMode.custom:
         return Image.file(
           io.File(path),
@@ -157,7 +194,11 @@ class CoverArtTexture extends StatelessWidget {
           filterQuality: filterQuality,
           isAntiAlias: true,
           errorBuilder: (context, error, stackTrace) {
-            return _buildDefaultCover();
+            return _buildDefaultCover(
+              width: width,
+              height: height,
+              borderRadius: borderRadius ?? BorderRadius.zero,
+            );
           },
         );
     }
@@ -175,7 +216,16 @@ class CoverArtTexture extends StatelessWidget {
     return (value * multiplier).clamp(64, 1024).round();
   }
 
-  Widget _buildDefaultCover() {
+  double _sanitizeDimension(double value, double fallback) {
+    if (!value.isFinite || value <= 0) return fallback;
+    return value;
+  }
+
+  Widget _buildDefaultCover({
+    required double width,
+    required double height,
+    required BorderRadius borderRadius,
+  }) {
     return Container(
       width: width,
       height: height,
@@ -183,15 +233,18 @@ class CoverArtTexture extends StatelessWidget {
         borderRadius: borderRadius,
         color: const Color(0xFF1A1A1A),
       ),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final size =
-            constraints.maxWidth.isFinite ? constraints.maxWidth * 0.4 : 60.0;
-        return Icon(
-          Icons.music_note,
-          color: Colors.white24,
-          size: size,
-        );
-      }),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.maxWidth.isFinite
+              ? constraints.maxWidth * 0.4
+              : 60.0;
+          return Icon(
+            Icons.music_note,
+            color: Colors.white24,
+            size: size,
+          );
+        },
+      ),
     );
   }
 }
@@ -285,9 +338,14 @@ class _NetworkCoverArtState extends State<_NetworkCoverArt> {
     final url = rawUrl.trim();
     if (url.isEmpty) return urls;
 
-    final clean = url.split('?').first;
+    final uri = Uri.tryParse(url);
+    final clean = uri?.hasQuery == true
+        ? url.split('?').first
+        : url;
+
     final googleSized = RegExp(r'=w\d+-h\d+[^?]*$');
     final googleSquare = RegExp(r'=s\d+[^?]*$');
+
     if (googleSized.hasMatch(clean)) {
       add(clean.replaceFirst(googleSized, '=w1200-h1200-l90-rj'));
       add(clean.replaceFirst(googleSized, '=w960-h960-l90-rj'));
@@ -306,16 +364,35 @@ class _NetworkCoverArtState extends State<_NetworkCoverArt> {
       for (final name in const [
         'maxresdefault.jpg',
         'sddefault.jpg',
-        'mqdefault.jpg',
         'hq720.jpg',
         'hqdefault.jpg',
+        'mqdefault.jpg',
       ]) {
         add('$prefix$name');
       }
     }
 
+    final ggphtMatch =
+        RegExp(r'(https?:\/\/yt3\.ggpht\.com\/[^=]+)')
+            .firstMatch(url);
+    if (ggphtMatch != null) {
+      final base = ggphtMatch.group(1)!;
+      add('$base=s544');
+      add('$base=s720');
+      add('$base=s1200');
+    }
+
+    final sizedInPath = RegExp(r'\/(w\d+)-h\d+\/').firstMatch(url);
+    if (sizedInPath != null) {
+      final upgraded = url.replaceFirst(
+          RegExp(r'\/(w\d+)-h\d+\/'), '/w1200-h1200/');
+      if (upgraded != url) add(upgraded);
+    }
+
     add(url);
-    add(clean);
+    if (uri?.hasQuery == true) {
+      add(clean);
+    }
     return urls;
   }
 }

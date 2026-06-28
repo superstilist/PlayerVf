@@ -20,6 +20,7 @@ import '../services/youtube_music_service.dart';
 import '../widgets/audio_effects_menu.dart';
 import '../widgets/blurred_cover_background.dart';
 import '../widgets/lanczos_cover_art.dart';
+import '../widgets/cover_art_texture.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/playback_progress_control.dart';
 import '../widgets/stable_video_surface.dart';
@@ -1229,7 +1230,16 @@ class _VideoPageState extends State<VideoPage> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(Responsive.listArtRadius),
-                  child: LanczosCoverArt(
+                  child: item.coverPath.startsWith('http://') ||
+                          item.coverPath.startsWith('https://')
+                      ? CoverArtTexture(
+                          coverArtPath: item.coverPath,
+                          width: Responsive.listArtSize,
+                          height: Responsive.listArtSize,
+                          borderRadius:
+                              BorderRadius.circular(Responsive.listArtRadius),
+                        )
+                      : LanczosCoverArt(
                     coverArtPath: item.coverPath,
                     width: Responsive.listArtSize,
                     height: Responsive.listArtSize,
@@ -1595,7 +1605,16 @@ class _VideoPageState extends State<VideoPage> {
                           child: SizedBox(
                             width: Responsive.listArtSize,
                             height: Responsive.listArtSize,
-                            child: LanczosCoverArt(
+                  child: item.coverPath.startsWith('http://') ||
+                          item.coverPath.startsWith('https://')
+                      ? CoverArtTexture(
+                          coverArtPath: item.coverPath,
+                          width: Responsive.listArtSize,
+                          height: Responsive.listArtSize,
+                          borderRadius:
+                              BorderRadius.circular(Responsive.listArtRadius),
+                        )
+                      : LanczosCoverArt(
                               coverArtPath: item.coverPath,
                               width: Responsive.listArtSize,
                               height: Responsive.listArtSize,
@@ -1919,40 +1938,43 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
                   );
                   return Column(
                     children: [
-                      SliderTheme(
-                        data: const SliderThemeData(
-                          trackHeight: 4,
-                          thumbShape:
-                              RoundSliderThumbShape(enabledThumbRadius: 6),
-                          overlayShape:
-                              RoundSliderOverlayShape(overlayRadius: 14),
-                          activeTrackColor: Colors.white,
-                          inactiveTrackColor: Colors.white24,
-                          thumbColor: Colors.white,
-                        ),
-                        child: Slider(
-                          value: progress,
-                          min: 0,
-                          max: 1,
-                          onChanged: duration <= Duration.zero
-                              ? null
-                              : (value) {
-                                  _showOverlay();
-                                  setState(() {
-                                    _dragProgress = value;
-                                  });
-                                },
-                          onChangeEnd: duration <= Duration.zero
-                              ? null
-                              : (value) {
-                                  widget.musicService.seekTo(Duration(
-                                    milliseconds:
-                                        (value * duration.inMilliseconds)
-                                            .round(),
-                                  ));
-                                  setState(() => _dragProgress = null);
-                                  _scheduleOverlayHide();
-                                },
+                      ExcludeSemantics(
+                        excluding: true,
+                        child: SliderTheme(
+                          data: const SliderThemeData(
+                            trackHeight: 4,
+                            thumbShape:
+                                RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape:
+                                RoundSliderOverlayShape(overlayRadius: 14),
+                            activeTrackColor: Colors.white,
+                            inactiveTrackColor: Colors.white24,
+                            thumbColor: Colors.white,
+                          ),
+                          child: Slider(
+                            value: progress,
+                            min: 0,
+                            max: 1,
+                            onChanged: duration <= Duration.zero
+                                ? null
+                                : (value) {
+                                    _showOverlay();
+                                    setState(() {
+                                      _dragProgress = value;
+                                    });
+                                  },
+                            onChangeEnd: duration <= Duration.zero
+                                ? null
+                                : (value) {
+                                    widget.musicService.seekTo(Duration(
+                                      milliseconds:
+                                          (value * duration.inMilliseconds)
+                                              .round(),
+                                    ));
+                                    setState(() => _dragProgress = null);
+                                    _scheduleOverlayHide();
+                                  },
+                          ),
                         ),
                       ),
                       Row(

@@ -994,6 +994,7 @@ class ID3Parser {
       putString('title', decoded['displayTitle'] ?? decoded['title']);
       putString('artist', decoded['displayArtist'] ?? decoded['artist']);
       putString('videoId', decoded['videoId']);
+      putString('coverPath', decoded['coverPath']);
       result['genre'] = 'YouTube Music Video';
       return result;
     } catch (e) {

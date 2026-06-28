@@ -58,11 +58,13 @@ class _StableVideoSurfaceState extends State<StableVideoSurface> {
         return SizedBox(
           width: width,
           height: height,
-          child: Video(
-            key: ValueKey('stable-video-${widget.surfaceKey}'),
-            controller: widget.controller,
-            fit: widget.fit,
-            controls: NoVideoControls,
+          child: ExcludeSemantics(
+            child: Video(
+              key: ValueKey('stable-video-${widget.surfaceKey}'),
+              controller: widget.controller,
+              fit: widget.fit,
+              controls: NoVideoControls,
+            ),
           ),
         );
       },

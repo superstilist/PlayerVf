@@ -14,12 +14,12 @@ class AppearanceScreen extends StatelessWidget {
     return Consumer<SettingsModel>(
       builder: (context, settings, child) {
         return Scaffold(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           appBar: AppBar(
             title: const Text('Appearance',
                 style:
                     TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0)),
-            backgroundColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded),

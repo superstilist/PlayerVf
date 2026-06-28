@@ -314,12 +314,13 @@ class _YoutubeMusicPageState extends State<YoutubeMusicPage>
                   const BorderRadius.vertical(top: Radius.circular(28)),
               color: theme.colorScheme.surface.withOpacity(0.94),
               blur: 12,
-              child: SafeArea(
-                top: false,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.88,
-                  ),
+        child: SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: double.infinity,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+            ),
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(18.w, 14.h, 18.w, 22.h),
                     child: Column(

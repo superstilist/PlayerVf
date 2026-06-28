@@ -29,7 +29,8 @@ class ListenTogetherSheet extends StatelessWidget {
                   children: [
                     Icon(Icons.groups_rounded, color: theme.colorScheme.primary),
                     SizedBox(width: 10.w),
-                    Expanded(
+                    SizedBox(
+                      width: double.infinity,
                       child: Text(
                         'Listen Together',
                         style: TextStyle(
@@ -171,7 +172,8 @@ class ListenTogetherSheet extends StatelessWidget {
         children: [
           Icon(icon, size: 17.s, color: theme.colorScheme.primary),
           SizedBox(width: 8.w),
-          Flexible(
+          SizedBox(
+            width: 200.w,
             child: Text(
               label,
               maxLines: 1,

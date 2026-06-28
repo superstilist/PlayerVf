@@ -149,15 +149,15 @@ bool MediaControlBridge::ShouldDropDuplicate(Command command,
 bool MediaControlBridge::HandleAppCommand(LPARAM lparam) {
   switch (GET_APPCOMMAND_LPARAM(lparam)) {
     case APPCOMMAND_MEDIA_PLAY_PAUSE:
-      if (!ShouldDropDuplicate(Command::kPlayPause, 220))
+      if (!ShouldDropDuplicate(Command::kPlayPause, 50))
         SendCommand(Command::kPlayPause, "appcommand");
       return true;
     case APPCOMMAND_MEDIA_PLAY:
-      if (!ShouldDropDuplicate(Command::kPlay, 180))
+      if (!ShouldDropDuplicate(Command::kPlay, 50))
         SendCommand(Command::kPlay, "appcommand");
       return true;
     case APPCOMMAND_MEDIA_PAUSE:
-      if (!ShouldDropDuplicate(Command::kPause, 180))
+      if (!ShouldDropDuplicate(Command::kPause, 50))
         SendCommand(Command::kPause, "appcommand");
       return true;
     case APPCOMMAND_MEDIA_STOP:
@@ -165,11 +165,11 @@ bool MediaControlBridge::HandleAppCommand(LPARAM lparam) {
         SendCommand(Command::kStop, "appcommand");
       return true;
     case APPCOMMAND_MEDIA_NEXTTRACK:
-      if (!ShouldDropDuplicate(Command::kNext, 220))
+      if (!ShouldDropDuplicate(Command::kNext, 50))
         SendCommand(Command::kNext, "appcommand");
       return true;
     case APPCOMMAND_MEDIA_PREVIOUSTRACK:
-      if (!ShouldDropDuplicate(Command::kPrevious, 220))
+      if (!ShouldDropDuplicate(Command::kPrevious, 50))
         SendCommand(Command::kPrevious, "appcommand");
       return true;
     case APPCOMMAND_VOLUME_UP:
@@ -236,7 +236,7 @@ void MediaControlBridge::HandleRawInput(LPARAM lparam) {
     const DWORD window = command == Command::kVolumeUp ||
                                  command == Command::kVolumeDown
                              ? 35
-                             : 220;
+                             : 50;
     if (!ShouldDropDuplicate(command, window)) {
       SendCommand(command, "rawinput");
     }
@@ -248,7 +248,7 @@ bool MediaControlBridge::HandleKeyboardEvent(WPARAM wparam, LPARAM lparam) {
   if (wparam != WM_KEYDOWN && wparam != WM_SYSKEYDOWN) return false;
   const auto* keyboard = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
   Command command = Command::kPlayPause;
-  DWORD duplicate_window = 220;
+  DWORD duplicate_window = 50;
   switch (keyboard->vkCode) {
     case VK_MEDIA_PLAY_PAUSE:
       command = Command::kPlayPause;

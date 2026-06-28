@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -20,6 +21,7 @@ import '../models/settings_model.dart';
 import 'app_directories.dart';
 import 'music_scanner_service.dart';
 import 'player_audio_handler.dart';
+import 'spicy_lyrics_service.dart';
 import 'user_feedback_store.dart';
 import 'video_playback_service.dart';
 import 'web_folder_picker.dart';
@@ -86,8 +88,12 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   final ValueNotifier<double> _volumeNotifier = ValueNotifier(100.0);
   final ValueNotifier<PlaybackSnapshot> _snapshotNotifier =
       ValueNotifier(PlaybackSnapshot.empty);
+  final ValueNotifier<Music?> _currentMusicNotifier = ValueNotifier(null);
+  final ValueNotifier<int> _currentIndexNotifier = ValueNotifier(0);
 
   ValueNotifier<PlaybackSnapshot> get snapshotNotifier => _snapshotNotifier;
+  ValueNotifier<Music?> get currentMusicNotifier => _currentMusicNotifier;
+  ValueNotifier<int> get currentIndexNotifier => _currentIndexNotifier;
 
   bool _isInitialized = false;
   DateTime _lastPositionUpdate = DateTime.now();
@@ -284,6 +290,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     await _applyStartupAudioSettings();
     await _loadLibrarySnapshotAsync();
     _isInitialized = true;
+    _currentMusicNotifier.value = currentMusic;
+    _currentIndexNotifier.value = _currentIndex;
     notifyListeners();
     unawaited(_refreshLibraryAfterFirstFrame());
   }
@@ -328,7 +336,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       if (_suppressPositionUpdatesForTrackChange) return;
 
       final now = DateTime.now();
-      if (now.difference(_lastPositionUpdate).inMilliseconds > 90) {
+      if (now.difference(_lastPositionUpdate).inMilliseconds > 16) {
         _position = pos;
         _positionNotifier.value = pos;
         _updateSnapshot();
@@ -510,20 +518,20 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     final command = args is Map ? args['command']?.toString() : null;
     switch (command) {
       case 'playPause':
-        await _handleSystemTogglePlayPause();
+        await _audioHandler.click(MediaButton.media);
         break;
       case 'play':
-        await _handleSystemPlay();
+        await _audioHandler.play();
         break;
       case 'pause':
       case 'stop':
-        await _handleSystemPause();
+        await _audioHandler.pause();
         break;
       case 'next':
-        await _handleSystemNext();
+        await _audioHandler.skipToNext();
         break;
       case 'previous':
-        await _handleSystemPrevious();
+        await _audioHandler.skipToPrevious();
         break;
       case 'volumeUp':
         adjustVolumeBy(5);
@@ -1807,7 +1815,36 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       return null;
     }
 
-    return _fetchLyricsOnlineForQueries(queries);
+    final lrclibResult = await _fetchLyricsOnlineForQueries(queries);
+    if (lrclibResult != null) return lrclibResult;
+
+    // Fallback: try Spicy Lyrics API
+    try {
+      final spicyResult = await SpicyLyricsService.fetchLyrics(music.id);
+      if (spicyResult != null && spicyResult.lines.isNotEmpty) {
+        return LrclibLyrics(
+          id: null,
+          trackName: music.title,
+          artistName: music.artist,
+          albumName: music.album,
+          durationSeconds: music.duration?.inSeconds,
+          syncedLyrics: spicyResult.source == 'spicylyrics'
+              ? spicyResult.lines
+                  .where((l) => l.timestamp != null)
+                  .map((l) {
+                    final ms = l.timestamp!.inMilliseconds;
+                    final min = ms ~/ 60000;
+                    final sec = (ms ~/ 1000) % 60;
+                    final cs = (ms % 1000) ~/ 10;
+                    return '[${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}] ${l.text}';
+                  })
+                  .join('\n')
+              : null,
+          plainLyrics: spicyResult.plainText,
+        );
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<LrclibLyrics?> _fetchLyricsOnlineForQueries(
@@ -3185,7 +3222,7 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
 
     final now = DateTime.now();
     final shouldUpdateNotifier =
-        (boundedPosition - _position).inMilliseconds.abs() > 70 ||
+        (boundedPosition - _position).inMilliseconds.abs() > 16 ||
             now.difference(_lastPositionUpdate).inMilliseconds > 350;
     _position = boundedPosition;
     if (shouldUpdateNotifier) {
@@ -3481,6 +3518,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       _videoPlayback.setCurrentTrack(track);
+      _currentMusicNotifier.value = track;
+      _currentIndexNotifier.value = _currentIndex;
       await _smoothOpenAndPlay(track, startPosition, playAfterOpen: true);
       _openedMusicId = trackId;
 
@@ -3548,6 +3587,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       _positionNotifier.value = Duration.zero;
       _duration = track.duration ?? Duration.zero;
       _durationNotifier.value = _duration;
+      _currentMusicNotifier.value = track;
+      _currentIndexNotifier.value = _currentIndex;
       await _smoothOpenAndPlay(track, Duration.zero, playAfterOpen: true);
       _openedMusicId = trackId;
 
@@ -4075,10 +4116,17 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     String album,
     String genre, {
     String? year,
+    String? spotifyUrl,
   }) async {
     final index = _musicList.indexWhere((music) => music.id == id);
     if (index != -1) {
       final old = _musicList[index];
+      final edited = Set<String>.from(old.userEditedFields);
+      if (title != old.title) edited.add('title');
+      if (artist != old.artist) edited.add('artist');
+      if (album != old.album) edited.add('album');
+      if (genre != old.genre) edited.add('genre');
+      if (year != null && year != old.year) edited.add('year');
       _musicList[index] = Music(
         id: old.id,
         title: title,
@@ -4088,17 +4136,20 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
         year: year ?? old.year,
         filePath: old.filePath,
         coverPath: old.coverPath,
+        httpHeaders: old.httpHeaders,
         duration: old.duration,
         isFavorite: old.isFavorite,
         playCount: old.playCount,
         lastPlayed: old.lastPlayed,
+        spotifyUrl: spotifyUrl ?? old.spotifyUrl,
         dateAdded: old.dateAdded,
+        userEditedFields: edited,
       );
       if (currentMusic?.id == id) {
         await _audioHandler.updateNowPlayingOnly(_musicList[index]);
       }
       notifyListeners();
-      _saveLibrarySnapshot();
+      await _saveLibrarySnapshot();
     }
   }
 
@@ -4107,6 +4158,8 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
     if (index == -1) return;
 
     final old = _musicList[index];
+    final edited = Set<String>.from(old.userEditedFields);
+    if (coverPath != old.coverPath) edited.add('coverPath');
     _musicList[index] = Music(
       id: old.id,
       title: old.title,
@@ -4116,11 +4169,14 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
       year: old.year,
       filePath: old.filePath,
       coverPath: coverPath,
+      httpHeaders: old.httpHeaders,
       duration: old.duration,
       isFavorite: old.isFavorite,
       playCount: old.playCount,
       lastPlayed: old.lastPlayed,
+      spotifyUrl: old.spotifyUrl,
       dateAdded: old.dateAdded,
+      userEditedFields: edited,
     );
 
     if (currentMusic?.id == id) {
@@ -4806,7 +4862,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
         isFavorite: !old.isFavorite,
         playCount: old.playCount,
         lastPlayed: old.lastPlayed,
+        spotifyUrl: old.spotifyUrl,
         dateAdded: old.dateAdded,
+        userEditedFields: old.userEditedFields,
       );
       _invalidateDataCache();
       _refreshRecommendations();
@@ -4845,7 +4903,9 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
         isFavorite: isFavorite,
         playCount: old.playCount,
         lastPlayed: old.lastPlayed,
+        spotifyUrl: old.spotifyUrl,
         dateAdded: old.dateAdded,
+        userEditedFields: old.userEditedFields,
       );
       changed = true;
     }
@@ -4973,19 +5033,24 @@ class MusicService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Music _mergeScannedTrackState(Music scanned, Music old) {
+    final edited = old.userEditedFields;
     final base = Music(
       id: scanned.id,
-      title: scanned.title,
-      artist: scanned.artist,
-      album: scanned.album,
+      title: edited.contains('title') ? old.title : scanned.title,
+      artist: edited.contains('artist') ? old.artist : scanned.artist,
+      album: edited.contains('album') ? old.album : scanned.album,
       filePath: scanned.filePath,
-      coverPath:
-          scanned.coverPath.isNotEmpty ? scanned.coverPath : old.coverPath,
-      genre: scanned.genre,
-      year: scanned.year.isNotEmpty ? scanned.year : old.year,
+      coverPath: edited.contains('coverPath')
+          ? old.coverPath
+          : (scanned.coverPath.isNotEmpty ? scanned.coverPath : old.coverPath),
+      genre: edited.contains('genre') ? old.genre : scanned.genre,
+      year: edited.contains('year')
+          ? old.year
+          : (scanned.year.isNotEmpty ? scanned.year : old.year),
       duration: scanned.duration ?? old.duration,
       isFavorite: old.isFavorite,
       dateAdded: old.dateAdded,
+      userEditedFields: edited,
     );
     return Music.fromBase(base, old.playCount, old.lastPlayed);
   }
