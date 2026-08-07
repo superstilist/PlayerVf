@@ -24,22 +24,17 @@ class AudioAnalyzer extends ChangeNotifier {
   }
 
   void _initAnalysis() {
-    // Note: Deep PCM analysis (FFT, volume peaks, phonemes) in pure Dart 
-    // requires a native FFI bridge. As a fallback for the offline/pure Dart 
-    // implementation, we analyze the timing drift in the position stream to 
-    // detect lag/silence, and provide an interface for future native FFT integration.
-    
     _positionSub = audioPlayer.positionStream.listen((position) {
       final delta = (position - _lastPosition).inMilliseconds.abs();
       _lastPosition = position;
 
-      // Mocking a transient detection API structure. 
-      // In a native implementation, this would fire when FFT detects a spike > threshold
-      // For now, we simulate a transient occasionally to show the sync engine drift correction.
-      if (delta > 0 && DateTime.now().millisecond % 500 < 50) {
+      // Detect position jumps that could indicate audio glitches or seek events.
+      // A sudden jump > 50ms in a single position update suggests the player
+      // skipped or buffered, which is a meaningful sync event.
+      if (delta > 50 && delta < 2000) {
         _transientController.add(AudioTransientEvent(
           position: position,
-          intensity: 0.8, // 80% intensity peak
+          intensity: (delta / 500).clamp(0.3, 1.0),
         ));
       }
     });

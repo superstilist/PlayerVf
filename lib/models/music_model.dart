@@ -118,6 +118,44 @@ class Music {
       userEditedFields: base.userEditedFields,
     );
   }
+
+  Music copyWith({
+    String? id,
+    String? title,
+    String? artist,
+    String? album,
+    String? filePath,
+    String? coverPath,
+    Map<String, String>? httpHeaders,
+    String? genre,
+    String? year,
+    Duration? duration,
+    bool? isFavorite,
+    int? playCount,
+    DateTime? lastPlayed,
+    String? spotifyUrl,
+    DateTime? dateAdded,
+    Set<String>? userEditedFields,
+  }) {
+    return Music(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      album: album ?? this.album,
+      filePath: filePath ?? this.filePath,
+      coverPath: coverPath ?? this.coverPath,
+      httpHeaders: httpHeaders ?? this.httpHeaders,
+      genre: genre ?? this.genre,
+      year: year ?? this.year,
+      duration: duration ?? this.duration,
+      isFavorite: isFavorite ?? this.isFavorite,
+      playCount: playCount ?? this.playCount,
+      lastPlayed: lastPlayed ?? this.lastPlayed,
+      spotifyUrl: spotifyUrl ?? this.spotifyUrl,
+      dateAdded: dateAdded ?? this.dateAdded,
+      userEditedFields: userEditedFields ?? this.userEditedFields,
+    );
+  }
 }
 
 Map<String, String> _stringMapFromJson(Object? value) {

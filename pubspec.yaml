@@ -56,6 +56,18 @@ dependencies:
   window_manager: ^0.3.9
   ffmpeg_kit_flutter_new: 4.1.0
   html: ^0.15.6
+  ffi: ^2.2.0
+  # Unison auth - ECDSA P-256 signing
+  pointycastle: ^3.9.1
+  basic_utils: ^5.6.1
+  # Secure credential storage
+  flutter_secure_storage: ^9.2.4
+  # Better Lyrics API: Turnstile JWT auth + SSE lyrics streaming
+  dio: ^5.7.0
+  cookie_jar: ^4.0.8
+  dio_cookie_manager: ^3.1.1
+  webview_flutter: ^4.10.0
+  webview_flutter_windows: ^1.1.1
 
 dependency_overrides:
   flutter_rust_bridge: 2.11.1

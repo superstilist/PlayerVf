@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/lyrics_aligner_service.dart';
+
 enum ViewMode { card, list }
 
 enum NavPosition { top, bottom, left, right }
@@ -114,6 +116,8 @@ enum LyricsFullscreenParticlePack {
   confetti,
   custom
 }
+
+enum ShaderPreset { aurora, meshGradient, kawarp, plasma }
 
 class LyricsFullscreenVisualItem {
   final String id;
@@ -351,6 +355,7 @@ class SettingsModel extends ChangeNotifier {
   static const String _orbSizeKey = 'orb_size';
   static const String _orbSpeedKey = 'orb_speed';
   static const String _fastSettingsItemsKey = 'fast_settings_items';
+  static const String _useModernUiKey = 'use_modern_ui';
 
   List<String> musicSourcePaths = [];
   String youtubeMusicDownloadPath = '';
@@ -380,6 +385,7 @@ class SettingsModel extends ChangeNotifier {
   double borderRadius = 12.0;
   double glassEffect = 0.35;
   Color accentColor = Colors.teal;
+  bool useModernUi = true;
   BackgroundMode backgroundMode = BackgroundMode.coverArt;
   String customBackgroundImage = '';
   int seekStepSeconds = 5;
@@ -465,6 +471,10 @@ class SettingsModel extends ChangeNotifier {
   bool lyricsWordByWordHighlight = true;
   bool lyricsAutoScrollProgress = true;
   int karaokeTransitionGapMs = 700;
+  bool lyricsVadAlignEnabled = true;
+  double lyricsPocketsphinxConfidenceThreshold = 0.65;
+  ShaderPreset lyricsShaderPreset = ShaderPreset.aurora;
+  bool lyricsAudioReactiveEnabled = false;
 
   SettingsModel();
 
@@ -517,6 +527,7 @@ class SettingsModel extends ChangeNotifier {
       if (savedFastItems != null && savedFastItems.isNotEmpty) {
         fastSettingsItems = savedFastItems;
       }
+      useModernUi = prefs.getBool(_useModernUiKey) ?? true;
 
       fontSize = prefs.getDouble(_fontSizeKey) ?? 14.0;
       borderRadius = prefs.getDouble(_borderRadiusKey) ?? 12.0;
@@ -741,6 +752,15 @@ class SettingsModel extends ChangeNotifier {
           prefs.getBool('lyrics_auto_scroll_progress') ?? true;
       karaokeTransitionGapMs =
           (prefs.getInt('karaoke_transition_gap_ms') ?? 700).clamp(0, 5000);
+      lyricsVadAlignEnabled =
+          prefs.getBool('lyrics_vad_align_enabled') ?? true;
+      LyricsAlignerService.instance.setEnabled(lyricsVadAlignEnabled);
+      lyricsPocketsphinxConfidenceThreshold =
+          (prefs.getDouble('lyrics_pocketsphinx_confidence') ?? 0.65).clamp(0.0, 1.0).toDouble();
+      lyricsShaderPreset = ShaderPreset.values[
+          (prefs.getInt('lyrics_shader_preset') ?? 0).clamp(0, ShaderPreset.values.length - 1)];
+      lyricsAudioReactiveEnabled =
+          prefs.getBool('lyrics_audio_reactive_enabled') ?? false;
 
       notifyListeners();
     } catch (e) {
@@ -889,6 +909,14 @@ class SettingsModel extends ChangeNotifier {
     if (accentColor.value != color.value) {
       accentColor = color;
       themePreset = ThemePreset.classic;
+      notifyListeners();
+      await _saveSettings();
+    }
+  }
+
+  Future<void> setUseModernUi(bool value) async {
+    if (useModernUi != value) {
+      useModernUi = value;
       notifyListeners();
       await _saveSettings();
     }
@@ -1515,6 +1543,31 @@ class SettingsModel extends ChangeNotifier {
     _saveSettingsDebounced();
   }
 
+  Future<void> setLyricsVadAlignEnabled(bool enabled) async {
+    lyricsVadAlignEnabled = enabled;
+    LyricsAlignerService.instance.setEnabled(enabled);
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsPocketsphinxConfidenceThreshold(double threshold) async {
+    lyricsPocketsphinxConfidenceThreshold = threshold.clamp(0.0, 1.0);
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsShaderPreset(ShaderPreset preset) async {
+    lyricsShaderPreset = preset;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
+  Future<void> setLyricsAudioReactiveEnabled(bool enabled) async {
+    lyricsAudioReactiveEnabled = enabled;
+    notifyListeners();
+    _saveSettingsDebounced();
+  }
+
   Future<void> setKaraokeTransitionGapMs(int gapMs) async {
     karaokeTransitionGapMs = gapMs.clamp(0, 5000);
     notifyListeners();
@@ -1565,6 +1618,7 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setDouble(
           _glassEffectKey, glassEffect.clamp(0.0, 1.0).toDouble());
       await prefs.setInt(_accentColorKey, accentColor.value);
+      await prefs.setBool(_useModernUiKey, useModernUi);
       await prefs.setInt(_backgroundModeKey, backgroundMode.index);
       await prefs.setString(_customBackgroundImageKey, customBackgroundImage);
       await prefs.setInt(_seekStepSecondsKey, seekStepSeconds);
@@ -1690,6 +1744,14 @@ class SettingsModel extends ChangeNotifier {
       await prefs.setBool(
           'lyrics_auto_scroll_progress', lyricsAutoScrollProgress);
       await prefs.setInt('karaoke_transition_gap_ms', karaokeTransitionGapMs);
+      await prefs.setBool(
+          'lyrics_vad_align_enabled', lyricsVadAlignEnabled);
+      await prefs.setDouble(
+          'lyrics_pocketsphinx_confidence', lyricsPocketsphinxConfidenceThreshold);
+      await prefs.setInt(
+          'lyrics_shader_preset', lyricsShaderPreset.index);
+      await prefs.setBool(
+          'lyrics_audio_reactive_enabled', lyricsAudioReactiveEnabled);
     } catch (e) {
       debugPrint('Error saving settings: $e');
     }

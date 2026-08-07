@@ -45,19 +45,30 @@
           ? lines[i + 1].start
           : (totalDuration > line.start ? totalDuration : line.start + 5.0);
 
+      line.end = nextStart;
       var lineDuration = nextStart - line.start;
-      var wordDuration = lineDuration / wordTexts.length;
-
+      
+      // Better Lyrics approach: distribute based on word length
+      var totalChars = wordTexts.reduce(function(sum, w) { return sum + w.length; }, 0);
+      
       line.words = [];
       var wordStart = line.start;
       for (var w = 0; w < wordTexts.length; w++) {
-        var wordEnd = (w === wordTexts.length - 1) ? nextStart : wordStart + wordDuration;
+        var charRatio = totalChars > 0 ? wordTexts[w].length / totalChars : 1 / wordTexts.length;
+        var wordDuration = lineDuration * charRatio;
+        var wordEnd = wordStart + wordDuration;
+        
         line.words.push({
           text: wordTexts[w],
           start: wordStart,
           end: wordEnd
         });
         wordStart = wordEnd;
+      }
+      
+      // Ensure exact end boundary for last word to fix trailing sync issue
+      if (line.words.length > 0) {
+        line.words[line.words.length - 1].end = nextStart;
       }
     }
     return lines;
@@ -92,22 +103,9 @@
       for (var m = 0; m < matches.length; m++) {
         if (text.length === 0) continue;
         var start = _ts(matches[m]);
-        var end = start + 5.0;
-
-        var words = text.split(/\s+/).filter(function(w) { return w.length > 0; });
-        var wordDuration = words.length > 0 ? 5.0 / words.length : 5.0;
-        var wordObjs = [];
-        var ws = start;
-        for (var w = 0; w < words.length; w++) {
-          wordObjs.push({
-            text: words[w],
-            start: ws,
-            end: ws + wordDuration
-          });
-          ws += wordDuration;
-        }
-
-        lines.push({ text: text, start: start, end: end, words: wordObjs });
+        var end = start; // Re-calculated later in distribute
+        
+        lines.push({ text: text, start: start, end: end, words: [] });
       }
     }
 

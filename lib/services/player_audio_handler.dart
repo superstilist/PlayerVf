@@ -6,9 +6,8 @@ import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:smtc_windows/smtc_windows.dart' as smtc;
-
 import '../models/music_model.dart';
+import 'smtc_bridge.dart' as smtc;
 import 'headphone_gesture_recognizer.dart';
 
 late PlayerAudioHandler playerAudioHandler;
@@ -65,6 +64,7 @@ class PlayerAudioHandler extends BaseAudioHandler with SeekHandler {
   Stream<PlayerState> get playerStateStream =>
       _player?.playerStateStream ?? const Stream<PlayerState>.empty();
 
+  AudioPlayer? get audioPlayer => _player;
   Duration get position => _player?.position ?? Duration.zero;
   Duration? get duration => _player?.duration;
   bool get playing => _player?.playing ?? false;

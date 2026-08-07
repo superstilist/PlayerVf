@@ -1,9 +1,8 @@
-// ignore_for_file: avoid_web_libraries_in_flutter
-
 import 'dart:async';
-import 'dart:html' as html;
-import 'dart:js_util' as js_util;
+import 'dart:js_interop';
 import 'dart:typed_data';
+
+import 'package:web/web.dart' as web;
 
 import '../models/music_model.dart';
 
@@ -20,7 +19,7 @@ const Set<String> _supportedExtensions = {
 };
 
 Future<List<Music>> pickWebFolderMusic() async {
-  final input = html.FileUploadInputElement()
+  final input = web.HTMLInputElement()
     ..multiple = true
     ..accept = _supportedExtensions.map((ext) => '.$ext').join(',');
 
@@ -29,7 +28,7 @@ Future<List<Music>> pickWebFolderMusic() async {
     ..setAttribute('directory', '');
 
   final completer = Completer<List<Music>>();
-  late final StreamSubscription<html.Event> changeSub;
+  late final StreamSubscription<web.Event> changeSub;
 
   void complete(List<Music> tracks) {
     if (!completer.isCompleted) {
@@ -38,8 +37,16 @@ Future<List<Music>> pickWebFolderMusic() async {
   }
 
   changeSub = input.onChange.listen((_) async {
-    final files = input.files ?? const <html.File>[];
-    complete(await _filesToMusic(files));
+    final files = input.files;
+    final tracks = <Music>[];
+    if (files != null) {
+      for (var i = 0; i < files.length; i++) {
+        final file = files.item(i);
+        if (file == null) continue;
+        tracks.addAll(await _filesToMusic([file]));
+      }
+    }
+    complete(tracks);
   });
 
   input.click();
@@ -51,7 +58,7 @@ Future<List<Music>> pickWebFolderMusic() async {
   return tracks;
 }
 
-Future<List<Music>> _filesToMusic(List<html.File> files) async {
+Future<List<Music>> _filesToMusic(List<web.File> files) async {
   final tracks = <Music>[];
   for (final file in files) {
     final name = file.name.trim();
@@ -60,7 +67,7 @@ Future<List<Music>> _filesToMusic(List<html.File> files) async {
 
     final relativePath = _relativePath(file);
     final folder = _folderName(relativePath);
-    final url = html.Url.createObjectUrl(file);
+    final url = web.URL.createObjectURL(file);
     final coverUrl = await _extractCoverUrl(file);
     final title = _titleFromName(name);
     final idSeed = relativePath.isNotEmpty ? relativePath : name;
@@ -83,76 +90,41 @@ Future<List<Music>> _filesToMusic(List<html.File> files) async {
   return tracks;
 }
 
-Future<String> _extractCoverUrl(html.File file) async {
+Future<String> _extractCoverUrl(web.File file) async {
   if (!_extension(file.name).startsWith('mp3')) return '';
 
   try {
-    final reader = html.FileReader();
-    final completer = Completer<Uint8List?>();
-    late final StreamSubscription<html.ProgressEvent> loadSub;
-    late final StreamSubscription<html.Event> errorSub;
-
-    loadSub = reader.onLoad.listen((_) {
-      final result = reader.result;
-      if (result is ByteBuffer) {
-        completer.complete(Uint8List.view(result));
-      } else {
-        completer.complete(null);
-      }
-    });
-    errorSub = reader.onError.listen((_) => completer.complete(null));
-
     final header = await _readFileSlice(file, 0, 10);
     if (header == null ||
         header.length < 10 ||
         header[0] != 0x49 ||
         header[1] != 0x44 ||
         header[2] != 0x33) {
-      await loadSub.cancel();
-      await errorSub.cancel();
       return '';
     }
 
     final tagSize = (10 + _syncSafeInt(header, 6)).clamp(10, file.size);
-    reader.readAsArrayBuffer(file.slice(0, tagSize));
-    final bytes = await completer.future.timeout(
-      const Duration(seconds: 4),
-      onTimeout: () => null,
-    );
-    await loadSub.cancel();
-    await errorSub.cancel();
+    final bytes = await _readFileSlice(file, 0, tagSize);
     if (bytes == null) return '';
 
     final cover = _extractId3Cover(bytes);
     if (cover == null) return '';
-    return html.Url.createObjectUrlFromBlob(
-      html.Blob([cover.bytes], cover.mimeType),
-    );
+    return web.URL.createObjectURL(web.Blob(
+      [cover.bytes.toJS].toJS,
+      web.BlobPropertyBag(type: cover.mimeType),
+    ));
   } catch (_) {
     return '';
   }
 }
 
-Future<Uint8List?> _readFileSlice(html.File file, int start, int end) async {
-  final reader = html.FileReader();
-  final completer = Completer<Uint8List?>();
-  late final StreamSubscription<html.ProgressEvent> loadSub;
-  late final StreamSubscription<html.Event> errorSub;
-
-  loadSub = reader.onLoad.listen((_) {
-    final result = reader.result;
-    completer.complete(result is ByteBuffer ? Uint8List.view(result) : null);
-  });
-  errorSub = reader.onError.listen((_) => completer.complete(null));
-
-  reader.readAsArrayBuffer(file.slice(start, end));
-  final bytes = await completer.future.timeout(
-    const Duration(seconds: 2),
-    onTimeout: () => null,
-  );
-  await loadSub.cancel();
-  await errorSub.cancel();
-  return bytes;
+Future<Uint8List?> _readFileSlice(web.File file, int start, int end) async {
+  try {
+    final jsBuffer = await file.slice(start, end).arrayBuffer().toDart;
+    return Uint8List.view(jsBuffer.toDart);
+  } catch (_) {
+    return null;
+  }
 }
 
 _WebCover? _extractId3Cover(Uint8List bytes) {
@@ -256,10 +228,9 @@ class _WebCover {
   const _WebCover(this.mimeType, this.bytes);
 }
 
-String _relativePath(html.File file) {
+String _relativePath(web.File file) {
   try {
-    final value = js_util.getProperty<Object?>(file, 'webkitRelativePath');
-    return value?.toString() ?? '';
+    return file.webkitRelativePath;
   } catch (_) {
     return '';
   }

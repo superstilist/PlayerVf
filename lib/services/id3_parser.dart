@@ -364,8 +364,8 @@ class ID3Parser {
           }
         }
       }
-    } catch (e) {
-      if (kDebugMode) print('Error parsing MP3 tags: $e');
+    } catch (_) {
+      if (kDebugMode) print('Error parsing MP3 tags');
     }
 
     return result;

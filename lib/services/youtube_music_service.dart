@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/settings_model.dart';
 import 'app_directories.dart';
+import 'cpp_core_bridge_io.dart';
 
 class YoutubeMusicResult {
   final String resultType;
@@ -249,7 +250,6 @@ Map<String, String> _stringMapFromDynamic(Object? value) {
 }
 
 class YoutubeMusicService {
-  static const MethodChannel platform = MethodChannel('python_channel');
   static const int _maxStreamCacheEntries = 12;
 
   final Map<String, Future<YoutubeMusicStream>> _streamFutures = {};
@@ -262,16 +262,18 @@ class YoutubeMusicService {
           Platform.isLinux ||
           Platform.isMacOS);
 
-  static bool get usesNativeChannel => !kIsWeb && Platform.isAndroid;
+  static bool get _isDesktop =>
+      !kIsWeb &&
+      (Platform.isWindows ||
+          Platform.isLinux ||
+          Platform.isMacOS);
 
   Future<int> add(int a, int b) async {
-    if (!usesNativeChannel) {
-      final output = await _runPython(['add', '$a', '$b']);
-      return int.tryParse(output.trim()) ?? 0;
+    if (!_isDesktop) {
+      throw UnsupportedError('Add operation only supported on desktop platforms.');
     }
-
-    final result = await platform.invokeMethod<int>('add', {'a': a, 'b': b});
-    return result ?? 0;
+    final output = await _runPython(['add', '$a', '$b']);
+    return int.tryParse(output.trim()) ?? 0;
   }
 
   Future<List<YoutubeMusicResult>> search({
@@ -286,12 +288,8 @@ class YoutubeMusicService {
       }
 
       final List<dynamic> response;
-      if (usesNativeChannel) {
-        response = await platform.invokeMethod<List<dynamic>>(
-              'searchYoutubeMusic',
-              {'query': query, 'filter': filter, 'limit': limit},
-            ) ??
-            const [];
+      if (Platform.isAndroid) {
+        response = await _searchViaCppCore(query, filter, limit);
       } else {
         final output = await _runPython([
           'search',
@@ -311,8 +309,165 @@ class YoutubeMusicService {
               YoutubeMusicResult.fromMap(Map<String, dynamic>.from(item)))
           .toList();
     } catch (error) {
+      if (Platform.isAndroid) {
+        throw StateError(error.toString());
+      }
       throw StateError(_friendlyPythonError(error.toString()));
     }
+  }
+
+  Future<List<dynamic>> _searchViaCppCore(
+      String query, String filter, int limit) async {
+    final json = CppCoreBridge.ytmusicSearch(query);
+    if (json == null) {
+      throw StateError('C++ core returned empty results for query: $query');
+    }
+    return jsonDecode(json) as List<dynamic>;
+  }
+
+  /// Resolve a YouTube videoId via yt-dlp (through the Python bridge).
+  ///
+  /// Returns the best-matching videoId, or null when unavailable on this
+  /// platform or when yt-dlp finds no confident match (score < 40).
+  Future<String?> searchVideoIdViaYtDlp({
+    required String title,
+    required String artist,
+    int? durationSeconds,
+  }) async {
+    if (title.trim().isEmpty) return null;
+    if (kIsWeb || Platform.isAndroid || Platform.isIOS) return null;
+    try {
+      final output = await _runPython([
+        'search-video-id',
+        '--title',
+        title,
+        '--artist',
+        artist,
+        '--duration',
+        '${durationSeconds ?? 0}',
+      ]);
+      final decoded = jsonDecode(output);
+      if (decoded is Map<String, dynamic> &&
+          decoded['videoId'] is String &&
+          (decoded['videoId'] as String).isNotEmpty) {
+        final id = decoded['videoId'] as String;
+        debugPrint('[YouTubeMusic] yt-dlp videoId: $id '
+            '("${decoded['title']}" by "${decoded['artist']}", '
+            'score=${decoded['score']})');
+        return id;
+      }
+      debugPrint('[YouTubeMusic] yt-dlp found no confident match for '
+          '"$title" by "$artist": ${decoded is Map ? decoded : {}}');
+      return null;
+    } catch (e) {
+      debugPrint('[YouTubeMusic] yt-dlp videoId search error: $e');
+      return null;
+    }
+  }
+
+  /// Search YouTube for the best-matching video for [title] by [artist] and
+  /// return its [videoId]. Used to resolve a real YouTube link from local
+  /// track metadata so auth-based providers (Cubey/Better Lyrics) can key on
+  /// the video. Returns null when no confident match is found.
+  ///
+  /// Prefers yt-dlp (most reliable, works for non-Latin titles), and falls
+  /// back to the general search + scoring when yt-dlp is unavailable.
+  Future<String?> searchVideoIdForMetadata({
+    required String title,
+    required String artist,
+    int? durationSeconds,
+  }) async {
+    if (title.trim().isEmpty) return null;
+    if (!isSupported) return null;
+
+    final ytDlpId = await searchVideoIdViaYtDlp(
+      title: title,
+      artist: artist,
+      durationSeconds: durationSeconds,
+    );
+    if (ytDlpId != null) return ytDlpId;
+
+    try {
+      final query = artist.trim().isEmpty ? title.trim() : '$title $artist'.trim();
+      final results = await search(query: query, filter: 'songs', limit: 8);
+      if (results.isEmpty) return null;
+
+      final targetTitle = _normalize(title);
+      final targetArtist = _normalize(artist);
+
+      YoutubeMusicResult? best;
+      var bestScore = 0;
+      for (final r in results) {
+        var score = 0;
+        final rt = _normalize(r.title);
+        final ra = _normalize(r.artist);
+        if (rt.isNotEmpty) {
+          if (rt == targetTitle) {
+            score += 40;
+          } else if (rt.contains(targetTitle) || targetTitle.contains(rt)) {
+            score += 20;
+          } else {
+            score += _tokenOverlap(rt, targetTitle) * 8;
+          }
+        }
+        if (targetArtist.isNotEmpty && ra.isNotEmpty) {
+          if (ra == targetArtist) {
+            score += 30;
+          } else if (ra.contains(targetArtist) || targetArtist.contains(ra)) {
+            score += 15;
+          } else {
+            score += _tokenOverlap(ra, targetArtist) * 6;
+          }
+        }
+        if (durationSeconds != null && durationSeconds > 0) {
+          final d = _parseDurationSeconds(r.duration);
+          if (d != null && (d - durationSeconds).abs() <= 3) {
+            score += 10;
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = r;
+        }
+      }
+
+      if (best == null || bestScore < 40 || best.videoId.isEmpty) return null;
+      debugPrint('[YouTubeMusic] searchVideoIdForMetadata("$title" by "$artist") '
+          '-> ${best.videoId} ("${best.title}" by "${best.artist}", score=$bestScore)');
+      return best.videoId;
+    } catch (e) {
+      debugPrint('[YouTubeMusic] searchVideoIdForMetadata error: $e');
+      return null;
+    }
+  }
+
+  static String _normalize(String s) {
+    return s
+        .toLowerCase()
+        // Keep Unicode letters/numbers (Japanese, Cyrillic, Chinese, etc.);
+        // strip punctuation and other symbols only.
+        .replaceAll(RegExp(r'[^\p{L}\p{N} ]', unicode: true), '')
+        .trim();
+  }
+
+  static int _tokenOverlap(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return 0;
+    final setA = a.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    final setB = b.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toSet();
+    if (setA.isEmpty || setB.isEmpty) return 0;
+    final intersection = setA.intersection(setB).length;
+    return intersection * 4 ~/ (setA.length + setB.length);
+  }
+
+  static int? _parseDurationSeconds(String duration) {
+    if (duration.isEmpty) return null;
+    final parts = duration.split(':').map((p) => int.tryParse(p.trim())).toList();
+    if (parts.any((p) => p == null)) return null;
+    final nums = parts.cast<int>();
+    if (nums.isEmpty) return null;
+    if (nums.length == 1) return nums[0];
+    if (nums.length == 2) return nums[0] * 60 + nums[1];
+    return nums[0] * 3600 + nums[1] * 60 + nums[2];
   }
 
   Future<YoutubeMusicDownload> download(
@@ -332,70 +487,54 @@ class YoutubeMusicService {
           'YouTube Music is not available on this platform yet.');
     }
 
+    if (Platform.isAndroid) {
+      throw UnsupportedError(
+          'YouTube Music download not available on Android. Use desktop app or wait for C++ core extension.');
+    }
+
     try {
-      final Map<dynamic, dynamic> response;
       final outputDir = await _resolveDownloadDirectory();
-      if (usesNativeChannel) {
-        final channelMap = result.toChannelMap()
-          ..['outputDir'] = outputDir
-          ..['video'] = video
-          ..['qualityHeight'] = qualityHeight
-          ..['qualityHeights'] = qualityHeights
-          ..['subtitlesOnly'] = subtitlesOnly
-          ..['includeSubtitles'] = includeSubtitles
-          ..['subtitleLanguage'] = subtitleLanguage
-          ..['subtitleLanguages'] = subtitleLanguages
-          ..['automaticSubtitles'] = automaticSubtitles;
-        onProgress?.call(null, 'Starting download...');
-        response = await platform.invokeMethod<Map<dynamic, dynamic>>(
-              'downloadYoutubeMusic',
-              channelMap,
-            ) ??
-            const {};
-        onProgress?.call(1, 'Download finished.');
-      } else {
-        final args = [
-          'download',
-          '--item-json',
-          jsonEncode(result.toChannelMap()),
-          '--output-dir',
-          outputDir,
-        ];
-        if (video) {
-          args.add('--video');
-        }
-        if (qualityHeight != null && qualityHeight > 0) {
-          args.addAll(['--quality-height', '$qualityHeight']);
-        }
-        if (qualityHeights.isNotEmpty) {
-          args.addAll([
-            '--quality-heights',
-            qualityHeights.where((height) => height > 0).join(',')
-          ]);
-        }
-        if (subtitlesOnly) {
-          args.add('--subtitles-only');
-        }
-        if (includeSubtitles) {
-          args.add('--write-subtitles');
-          if ((subtitleLanguage ?? '').trim().isNotEmpty) {
-            args.addAll(['--subtitle-lang', subtitleLanguage!.trim()]);
-          }
-          final languages = subtitleLanguages
-              .map((language) => language.trim())
-              .where((language) => language.isNotEmpty)
-              .toSet()
-              .join(',');
-          if (languages.isNotEmpty) {
-            args.addAll(['--subtitle-langs', languages]);
-          }
-          if (automaticSubtitles) {
-            args.add('--auto-subtitles');
-          }
-        }
-        final output = await _runPython(args, onProgress: onProgress);
-        response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
+      final args = [
+        'download',
+        '--item-json',
+        jsonEncode(result.toChannelMap()),
+        '--output-dir',
+        outputDir,
+      ];
+      if (video) {
+        args.add('--video');
       }
+      if (qualityHeight != null && qualityHeight > 0) {
+        args.addAll(['--quality-height', '$qualityHeight']);
+      }
+      if (qualityHeights.isNotEmpty) {
+        args.addAll([
+          '--quality-heights',
+          qualityHeights.where((height) => height > 0).join(',')
+        ]);
+      }
+      if (subtitlesOnly) {
+        args.add('--subtitles-only');
+      }
+      if (includeSubtitles) {
+        args.add('--write-subtitles');
+        if ((subtitleLanguage ?? '').trim().isNotEmpty) {
+          args.addAll(['--subtitle-lang', subtitleLanguage!.trim()]);
+        }
+        final languages = subtitleLanguages
+            .map((language) => language.trim())
+            .where((language) => language.isNotEmpty)
+            .toSet()
+            .join(',');
+        if (languages.isNotEmpty) {
+          args.addAll(['--subtitle-langs', languages]);
+        }
+        if (automaticSubtitles) {
+          args.add('--auto-subtitles');
+        }
+      }
+      final output = await _runPython(args, onProgress: onProgress);
+      final response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
 
       return YoutubeMusicDownload.fromMap(Map<String, dynamic>.from(response));
     } catch (error) {
@@ -502,40 +641,33 @@ class YoutubeMusicService {
           'YouTube Music is not available on this platform yet.');
     }
 
+    if (Platform.isAndroid) {
+      throw UnsupportedError(
+          'YouTube Music streaming not available on Android. Use desktop app or wait for C++ core extension.');
+    }
+
     try {
-      final Map<dynamic, dynamic> response;
-      if (usesNativeChannel) {
-        final channelMap = result.toChannelMap()
-          ..['audioOnly'] = audioOnly
-          ..['qualityHeight'] = maxHeight;
-        response = await platform.invokeMethod<Map<dynamic, dynamic>>(
-              'streamYoutubeMusic',
-              channelMap,
-            ) ??
-            const {};
-      } else {
-        final args = [
-          'stream',
-          '--item-json',
-          jsonEncode(result.toChannelMap()),
-        ];
-        if (!await _streamVideoCacheEnabled()) {
-          args.add('--no-stream-cache');
-        }
-        if (maxHeight != null && maxHeight > 0) {
-          args.addAll(['--quality-height', '$maxHeight']);
-        }
-        if (audioOnly) {
-          args.add('--audio-only');
-        }
-        final output = await _runPython(
-          args,
-          timeout: audioOnly
-              ? const Duration(seconds: 45)
-              : const Duration(minutes: 3),
-        );
-        response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
+      final args = [
+        'stream',
+        '--item-json',
+        jsonEncode(result.toChannelMap()),
+      ];
+      if (!await _streamVideoCacheEnabled()) {
+        args.add('--no-stream-cache');
       }
+      if (maxHeight != null && maxHeight > 0) {
+        args.addAll(['--quality-height', '$maxHeight']);
+      }
+      if (audioOnly) {
+        args.add('--audio-only');
+      }
+      final output = await _runPython(
+        args,
+        timeout: audioOnly
+            ? const Duration(seconds: 45)
+            : const Duration(minutes: 3),
+      );
+      final response = Map<dynamic, dynamic>.from(jsonDecode(output) as Map);
 
       return YoutubeMusicStream.fromMap(Map<String, dynamic>.from(response));
     } catch (error) {
